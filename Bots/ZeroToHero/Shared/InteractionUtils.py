@@ -6,7 +6,7 @@ Provides:
 - Gadget interaction state machines
 - NPC interaction helpers
 - Enemy hunting/killing state machines
-- Dropped item pickup
+- Dropped item pickup (by ModelID or position)
 """
 
 from Py4GWCoreLib import *
@@ -344,7 +344,42 @@ class EnemyFinder:
                     if not Agent.IsValid(agent_id):
                         continue
                     agent_name = Agent.GetName(agent_id)
-                    if name.lower() in agent_name.lower():
+                    if agent_name and name.lower() in agent_name.lower():
+                        return agent_id
+                except Exception:
+                    continue
+            
+            return 0
+        except Exception:
+            return 0
+    
+    @staticmethod
+    def FindEnemyByModelID(model_id, max_distance=5000, alive_only=True):
+        """
+        Find an enemy by ModelID within range.
+        
+        Args:
+            model_id (int): ModelID to search for
+            max_distance (float): Maximum search radius
+            alive_only (bool): Only return alive enemies
+            
+        Returns:
+            int: Agent ID if found, 0 otherwise
+        """
+        try:
+            player_pos = Player.GetXY()
+            enemies = AgentArray.GetEnemyArray()
+            enemies = AgentArray.Filter.ByDistance(enemies, player_pos, max_distance)
+            
+            if alive_only:
+                enemies = AgentArray.Filter.ByCondition(enemies, lambda id: Agent.IsAlive(id))
+            
+            for agent_id in enemies:
+                try:
+                    if not Agent.IsValid(agent_id):
+                        continue
+                    living = Agent.GetLivingAgent(agent_id)
+                    if living and living.player_number == model_id:
                         return agent_id
                 except Exception:
                     continue
@@ -380,7 +415,7 @@ class EnemyFinder:
                     if not Agent.IsValid(agent_id):
                         continue
                     agent_name = Agent.GetName(agent_id)
-                    if name.lower() in agent_name.lower():
+                    if agent_name and name.lower() in agent_name.lower():
                         result.append(agent_id)
                 except Exception:
                     continue
@@ -388,6 +423,31 @@ class EnemyFinder:
             return result
         except Exception:
             return []
+    
+    @staticmethod
+    def FindNearestEnemy(max_distance=1200, alive_only=True):
+        """
+        Find the nearest enemy within range (regardless of name).
+        
+        Args:
+            max_distance (float): Maximum search radius
+            alive_only (bool): Only return alive enemies
+            
+        Returns:
+            int: Agent ID if found, 0 otherwise
+        """
+        try:
+            player_pos = Player.GetXY()
+            enemies = AgentArray.GetEnemyArray()
+            enemies = AgentArray.Filter.ByDistance(enemies, player_pos, max_distance)
+            
+            if alive_only:
+                enemies = AgentArray.Filter.ByCondition(enemies, lambda id: Agent.IsAlive(id))
+            
+            enemies = AgentArray.Sort.ByDistance(enemies, player_pos)
+            return enemies[0] if enemies else 0
+        except Exception:
+            return 0
     
     @staticmethod
     def IsEnemyDead(agent_id):
@@ -418,6 +478,154 @@ class EnemyFinder:
         """
         enemies = EnemyFinder.FindAllEnemiesByName(name, max_distance, alive_only=True)
         return len(enemies)
+    
+    @staticmethod
+    def GetEnemyCount(max_distance=1200):
+        """
+        Get count of all alive enemies within range.
+        
+        Args:
+            max_distance (float): Search radius
+            
+        Returns:
+            int: Number of alive enemies
+        """
+        try:
+            player_pos = Player.GetXY()
+            enemies = AgentArray.GetEnemyArray()
+            enemies = AgentArray.Filter.ByDistance(enemies, player_pos, max_distance)
+            enemies = AgentArray.Filter.ByCondition(enemies, lambda id: Agent.IsAlive(id))
+            return len(enemies)
+        except Exception:
+            return 0
+
+
+class ItemFinder:
+    """
+    Utility class for finding dropped items on the ground.
+    Uses the same approach as LootManager.py
+    """
+    
+    @staticmethod
+    def GetAllGroundItems(max_distance=5000):
+        """
+        Get all items on the ground within range.
+        
+        Args:
+            max_distance (float): Search radius
+            
+        Returns:
+            list: List of tuples (agent_id, model_id, distance)
+        """
+        result = []
+        try:
+            player_pos = Player.GetXY()
+            items = AgentArray.GetItemArray()
+            items = AgentArray.Filter.ByDistance(items, player_pos, max_distance)
+            
+            for agent_id in items:
+                try:
+                    if not Agent.IsValid(agent_id):
+                        continue
+                    item_agent = Agent.GetItemAgent(agent_id)
+                    if item_agent and item_agent.item_id > 0:
+                        model_id = Item.GetModelID(item_agent.item_id)
+                        item_pos = Agent.GetXY(agent_id)
+                        dist = Utils.Distance(player_pos, item_pos)
+                        result.append((agent_id, model_id, dist))
+                except Exception:
+                    continue
+            
+            # Sort by distance
+            result.sort(key=lambda x: x[2])
+            return result
+        except Exception:
+            return []
+    
+    @staticmethod
+    def FindItemByModelID(model_id, max_distance=2000):
+        """
+        Find a ground item by its ModelID.
+        
+        Args:
+            model_id (int): The ModelID to search for
+            max_distance (float): Search radius
+            
+        Returns:
+            int: Agent ID if found, 0 otherwise
+        """
+        try:
+            player_pos = Player.GetXY()
+            items = AgentArray.GetItemArray()
+            items = AgentArray.Filter.ByDistance(items, player_pos, max_distance)
+            
+            for agent_id in items:
+                try:
+                    if not Agent.IsValid(agent_id):
+                        continue
+                    item_agent = Agent.GetItemAgent(agent_id)
+                    if item_agent and item_agent.item_id > 0:
+                        item_model_id = Item.GetModelID(item_agent.item_id)
+                        if item_model_id == model_id:
+                            return agent_id
+                except Exception:
+                    continue
+            
+            return 0
+        except Exception:
+            return 0
+    
+    @staticmethod
+    def FindNearestItem(max_distance=2000):
+        """
+        Find the nearest ground item.
+        
+        Args:
+            max_distance (float): Search radius
+            
+        Returns:
+            int: Agent ID if found, 0 otherwise
+        """
+        items = ItemFinder.GetAllGroundItems(max_distance)
+        if items:
+            return items[0][0]  # Return agent_id of nearest
+        return 0
+    
+    @staticmethod
+    def FindItemNearPosition(x, y, max_distance=500):
+        """
+        Find any item near a specific position.
+        
+        Args:
+            x (float): X coordinate
+            y (float): Y coordinate
+            max_distance (float): Search radius from position
+            
+        Returns:
+            int: Agent ID if found, 0 otherwise
+        """
+        try:
+            target_pos = (x, y)
+            items = AgentArray.GetItemArray()
+            
+            nearest_id = 0
+            nearest_dist = max_distance + 1
+            
+            for agent_id in items:
+                try:
+                    if not Agent.IsValid(agent_id):
+                        continue
+                    item_pos = Agent.GetXY(agent_id)
+                    dist = Utils.Distance(target_pos, item_pos)
+                    if dist < nearest_dist:
+                        nearest_dist = dist
+                        nearest_id = agent_id
+                except Exception:
+                    continue
+            
+            return nearest_id if nearest_dist <= max_distance else 0
+        except Exception:
+            return 0
 
 
 class TargetedKillState:
@@ -546,10 +754,18 @@ class TargetedKillState:
 
 class ItemPickupState:
     """
-    State machine for picking up a dropped item by name.
+    State machine for picking up a dropped item.
+    Now supports both name-based and ModelID-based searching.
     
     Usage:
-        pickup = ItemPickupState("Corsair Grab")
+        # By name (legacy)
+        pickup = ItemPickupState("Corsair Garb")
+        
+        # By ModelID (preferred)
+        pickup = ItemPickupState(model_id=12345)
+        
+        # By position (for any item near a location)
+        pickup = ItemPickupState(near_position=(x, y))
         
         # In your execution loop:
         result = pickup.Execute(logger)
@@ -563,15 +779,20 @@ class ItemPickupState:
     STATE_WAIT = 3
     STATE_VERIFY = 4
     
-    def __init__(self, item_name, max_distance=2000, pickup_distance=150, timeout_ms=15000):
+    def __init__(self, item_name=None, model_id=None, near_position=None, 
+                 max_distance=2000, pickup_distance=150, timeout_ms=15000):
         """
         Args:
-            item_name (str): Name of the item to pick up
+            item_name (str): Name of the item to pick up (legacy)
+            model_id (int): ModelID of the item to pick up (preferred)
+            near_position (tuple): (x, y) position to search near
             max_distance (float): Search radius
             pickup_distance (float): Distance at which to attempt pickup
             timeout_ms (int): Search timeout
         """
         self.item_name = item_name
+        self.model_id = model_id
+        self.near_position = near_position
         self.max_distance = max_distance
         self.pickup_distance = pickup_distance
         self.timeout_ms = timeout_ms
@@ -582,7 +803,11 @@ class ItemPickupState:
         self._timer.Start()
         self._search_timer = Timer()
         self._search_timer.Start()
+        self._move_timer = Timer()
+        self._move_timer.Start()
         self._logged = False
+        self._pickup_attempts = 0
+        self._max_pickup_attempts = 5
     
     def Reset(self):
         """Reset the pickup state."""
@@ -590,10 +815,33 @@ class ItemPickupState:
         self._item_agent_id = 0
         self._timer.Reset()
         self._search_timer.Reset()
+        self._move_timer.Reset()
         self._logged = False
+        self._pickup_attempts = 0
+    
+    def _FindItem(self):
+        """Find the item using the configured method."""
+        # Method 1: By ModelID (most reliable)
+        if self.model_id:
+            return ItemFinder.FindItemByModelID(self.model_id, self.max_distance)
+        
+        # Method 2: By position (find any item near a spot)
+        if self.near_position:
+            return ItemFinder.FindItemNearPosition(
+                self.near_position[0], 
+                self.near_position[1], 
+                min(self.max_distance, 800)  # Tighter radius for position search
+            )
+        
+        # Method 3: By name (legacy, less reliable)
+        if self.item_name:
+            return self._FindItemByName()
+        
+        # Method 4: Just find nearest item
+        return ItemFinder.FindNearestItem(self.max_distance)
     
     def _FindItemByName(self):
-        """Find a dropped item by name."""
+        """Find a dropped item by name (legacy method)."""
         try:
             player_pos = Player.GetXY()
             items = AgentArray.GetItemArray()
@@ -604,17 +852,14 @@ class ItemPickupState:
                     if not Agent.IsValid(item_agent_id):
                         continue
                     
-                    # Get item info - items on ground are agents
                     item_agent = Agent.GetItemAgent(item_agent_id)
-                    if item_agent:
-                        # Try to get item name via Item class
-                        item_id = item_agent.item_id
-                        if item_id > 0:
-                            Item.RequestName(item_id)
-                            if Item.IsNameReady(item_id):
-                                name = Item.GetName(item_id)
-                                if self.item_name.lower() in name.lower():
-                                    return item_agent_id
+                    if item_agent and item_agent.item_id > 0:
+                        # Try to get item name
+                        Item.RequestName(item_agent.item_id)
+                        if Item.IsNameReady(item_agent.item_id):
+                            name = Item.GetName(item_agent.item_id)
+                            if name and self.item_name.lower() in name.lower():
+                                return item_agent_id
                 except Exception:
                     continue
             
@@ -630,17 +875,19 @@ class ItemPickupState:
             str: "searching", "moving", "picking_up", "success", or "failed"
         """
         if self._state == self.STATE_SEARCH:
-            item_id = self._FindItemByName()
+            item_id = self._FindItem()
             
             if item_id == 0:
                 if self._search_timer.HasElapsed(self.timeout_ms):
+                    search_desc = self.item_name or f"ModelID {self.model_id}" or "item"
                     if logger:
-                        logger.Add(f"Could not find {self.item_name}", (1, 0.5, 0, 1), prefix="[Warn]")
+                        logger.Add(f"Could not find {search_desc}", (1, 0.5, 0, 1), prefix="[Warn]")
                     return "failed"
                 
                 if not self._logged and self._timer.HasElapsed(2000):
+                    search_desc = self.item_name or f"item"
                     if logger:
-                        logger.Add(f"Looking for {self.item_name}...", (1, 1, 0, 1))
+                        logger.Add(f"Looking for {search_desc}...", (1, 1, 0, 1))
                     self._logged = True
                 
                 return "searching"
@@ -648,11 +895,14 @@ class ItemPickupState:
             self._item_agent_id = item_id
             self._state = self.STATE_MOVE
             self._timer.Reset()
+            self._move_timer.Reset()
             return "moving"
         
         elif self._state == self.STATE_MOVE:
             if not Agent.IsValid(self._item_agent_id):
+                # Item might have been picked up by someone else or despawned
                 self._state = self.STATE_SEARCH
+                self._search_timer.Reset()  # Reset search timer to give more time
                 return "searching"
             
             player_pos = Player.GetXY()
@@ -664,19 +914,22 @@ class ItemPickupState:
                 self._timer.Reset()
                 return "picking_up"
             
-            # Move toward item
-            if self._timer.HasElapsed(500):
+            # Move toward item (throttled)
+            if self._move_timer.HasElapsed(500):
                 Player.Move(item_pos[0], item_pos[1])
-                self._timer.Reset()
+                self._move_timer.Reset()
             
             return "moving"
         
         elif self._state == self.STATE_PICKUP:
-            if logger:
-                logger.Add(f"Picking up {self.item_name}...", (0, 1, 1, 1))
+            search_desc = self.item_name or "item"
+            if logger and self._pickup_attempts == 0:
+                logger.Add(f"Picking up {search_desc}...", (0, 1, 1, 1))
+            
             Player.Interact(self._item_agent_id)
             self._state = self.STATE_WAIT
             self._timer.Reset()
+            self._pickup_attempts += 1
             return "picking_up"
         
         elif self._state == self.STATE_WAIT:
@@ -687,12 +940,19 @@ class ItemPickupState:
         elif self._state == self.STATE_VERIFY:
             # Check if item is gone (picked up)
             if not Agent.IsValid(self._item_agent_id):
+                search_desc = self.item_name or "item"
                 if logger:
-                    logger.Add(f"Picked up {self.item_name}!", (0, 1, 0, 1))
+                    logger.Add(f"Picked up {search_desc}!", (0, 1, 0, 1))
                 return "success"
             
-            # Item still there, try again
-            self._state = self.STATE_PICKUP
+            # Item still there, retry
+            if self._pickup_attempts >= self._max_pickup_attempts:
+                if logger:
+                    logger.Add("Failed to pick up item after multiple attempts.", (1, 0, 0, 1), prefix="[Error]")
+                return "failed"
+            
+            # Try again - move closer
+            self._state = self.STATE_MOVE
             self._timer.Reset()
             return "picking_up"
         
@@ -838,6 +1098,9 @@ class ScanWhileMoving:
     State machine for moving along a path while scanning for specific enemies.
     When a target enemy is found, pauses movement to kill it, then continues.
     
+    Now also scans ALL living agents, not just enemies, to catch neutral NPCs
+    that haven't aggroed yet.
+    
     Usage:
         scanner = ScanWhileMoving(
             path_handler=my_path,
@@ -883,6 +1146,8 @@ class ScanWhileMoving:
         self._logged_engage = False
         self._timer = Timer()
         self._timer.Start()
+        self._scan_timer = Timer()
+        self._scan_timer.Start()
     
     def Reset(self):
         """Reset the scanner state."""
@@ -891,11 +1156,51 @@ class ScanWhileMoving:
         self._target_killed = False
         self._logged_engage = False
         self._timer.Reset()
+        self._scan_timer.Reset()
         self.path_handler.reset()
     
     def WasTargetKilled(self):
         """Check if the target enemy was killed during movement."""
         return self._target_killed
+    
+    def _ScanForTarget(self):
+        """
+        Scan for target enemy in both enemy array AND all living agents.
+        Returns agent_id if found, 0 otherwise.
+        """
+        # First check enemy array (already hostile)
+        target_id = EnemyFinder.FindEnemyByName(
+            self.target_enemy_name,
+            self.scan_distance,
+            alive_only=True
+        )
+        if target_id != 0:
+            return target_id
+        
+        # Also check all living agents (might be neutral/friendly until aggro)
+        try:
+            player_pos = Player.GetXY()
+            all_agents = AgentArray.GetAgentArray()
+            all_agents = AgentArray.Filter.ByDistance(all_agents, player_pos, self.scan_distance)
+            
+            for agent_id in all_agents:
+                try:
+                    if not Agent.IsValid(agent_id):
+                        continue
+                    if not Agent.IsLiving(agent_id):
+                        continue
+                    if not Agent.IsAlive(agent_id):
+                        continue
+                    
+                    agent_name = Agent.GetName(agent_id)
+                    if agent_name and self.target_enemy_name.lower() in agent_name.lower():
+                        return agent_id
+                except Exception:
+                    continue
+        except Exception:
+            pass
+        
+        return 0
     
     def Execute(self, logger=None):
         """
@@ -907,17 +1212,16 @@ class ScanWhileMoving:
         # Always check if target enemy is nearby (unless already killed and kill_once)
         if not (self.kill_once and self._target_killed):
             if self._state == self.STATE_MOVING:
-                target_id = EnemyFinder.FindEnemyByName(
-                    self.target_enemy_name,
-                    self.scan_distance,
-                    alive_only=True
-                )
-                
-                if target_id != 0:
-                    self._target_id = target_id
-                    self._state = self.STATE_ENGAGING
-                    self._logged_engage = False
-                    return "fighting"
+                # Scan periodically to avoid performance issues
+                if self._scan_timer.HasElapsed(500):
+                    target_id = self._ScanForTarget()
+                    self._scan_timer.Reset()
+                    
+                    if target_id != 0:
+                        self._target_id = target_id
+                        self._state = self.STATE_ENGAGING
+                        self._logged_engage = False
+                        return "fighting"
         
         if self._state == self.STATE_MOVING:
             # Normal movement with combat handling
@@ -961,6 +1265,186 @@ class ScanWhileMoving:
                 self._target_id = 0
                 return "enemy_killed"
             return "fighting"
+        
+        return "moving"
+
+
+class EscortNavigation:
+    """
+    Navigation that follows a path while staying within range of an escort NPC.
+    If the escort falls too far behind, waits for them to catch up.
+    
+    Usage:
+        escort_nav = EscortNavigation(
+            path_handler=my_path,
+            escort_name="Captain Besuz",
+            combat_handler=combat_handler,
+            navigation=nav,
+            max_escort_distance=1500
+        )
+        
+        # In your execution loop:
+        result = escort_nav.Execute(logger)
+        if result == "path_complete":
+            # Reached destination with escort!
+    """
+    
+    STATE_FIND_ESCORT = 0
+    STATE_MOVING = 1
+    STATE_WAITING_FOR_ESCORT = 2
+    STATE_FIGHTING = 3
+    
+    def __init__(self, path_handler, escort_name, combat_handler, navigation,
+                 max_escort_distance=1500, escort_search_distance=5000):
+        """
+        Args:
+            path_handler: PathHandler with waypoints
+            escort_name (str): Name of the escort NPC to stay near
+            combat_handler: CombatHandler for combat
+            navigation: MissionNavigation for movement
+            max_escort_distance (float): Max distance from escort before waiting
+            escort_search_distance (float): Distance to search for escort
+        """
+        self.path_handler = path_handler
+        self.escort_name = escort_name
+        self.combat_handler = combat_handler
+        self.navigation = navigation
+        self.max_escort_distance = max_escort_distance
+        self.escort_search_distance = escort_search_distance
+        
+        self._state = self.STATE_FIND_ESCORT
+        self._escort_id = 0
+        self._timer = Timer()
+        self._timer.Start()
+        self._wait_logged = False
+    
+    def Reset(self):
+        """Reset the escort navigation state."""
+        self._state = self.STATE_FIND_ESCORT
+        self._escort_id = 0
+        self._timer.Reset()
+        self._wait_logged = False
+        self.path_handler.reset()
+    
+    def _FindEscort(self):
+        """Find the escort NPC."""
+        try:
+            player_pos = Player.GetXY()
+            all_agents = AgentArray.GetAgentArray()
+            all_agents = AgentArray.Filter.ByDistance(all_agents, player_pos, self.escort_search_distance)
+            
+            for agent_id in all_agents:
+                try:
+                    if not Agent.IsValid(agent_id):
+                        continue
+                    if not Agent.IsLiving(agent_id):
+                        continue
+                    if not Agent.IsAlive(agent_id):
+                        continue
+                    
+                    agent_name = Agent.GetName(agent_id)
+                    if agent_name and self.escort_name.lower() in agent_name.lower():
+                        return agent_id
+                except Exception:
+                    continue
+        except Exception:
+            pass
+        return 0
+    
+    def _GetEscortDistance(self):
+        """Get distance to escort NPC."""
+        if self._escort_id == 0 or not Agent.IsValid(self._escort_id):
+            return -1
+        try:
+            player_pos = Player.GetXY()
+            escort_pos = Agent.GetXY(self._escort_id)
+            return Utils.Distance(player_pos, escort_pos)
+        except Exception:
+            return -1
+    
+    def Execute(self, logger=None):
+        """
+        Execute one tick of escort navigation.
+        
+        Returns:
+            str: "searching", "moving", "waiting", "fighting", or "path_complete"
+        """
+        # Check for enemies first
+        enemies = self.navigation.GetNearbyEnemies()
+        if enemies:
+            self.combat_handler.Execute(target_agent_id=enemies[0])
+            self._wait_logged = False
+            return "fighting"
+        
+        if self._state == self.STATE_FIND_ESCORT:
+            self._escort_id = self._FindEscort()
+            
+            if self._escort_id != 0:
+                if logger:
+                    logger.Add(f"Found {self.escort_name}. Staying close!", (0, 1, 1, 1))
+                self._state = self.STATE_MOVING
+            else:
+                # Can't find escort - continue anyway but keep searching
+                if self._timer.HasElapsed(5000):
+                    if logger:
+                        logger.Add(f"Searching for {self.escort_name}...", (1, 1, 0, 1))
+                    self._timer.Reset()
+                
+                # Try moving anyway
+                self._state = self.STATE_MOVING
+            
+            return "searching"
+        
+        elif self._state == self.STATE_MOVING:
+            # Re-find escort if lost
+            if self._escort_id == 0 or not Agent.IsValid(self._escort_id):
+                self._escort_id = self._FindEscort()
+            
+            # Check escort distance
+            escort_dist = self._GetEscortDistance()
+            
+            if escort_dist > 0 and escort_dist > self.max_escort_distance:
+                # Too far from escort - wait
+                self._state = self.STATE_WAITING_FOR_ESCORT
+                self._wait_logged = False
+                self._timer.Reset()
+                return "waiting"
+            
+            # Execute normal navigation
+            if self.navigation.Execute(self.path_handler, logger):
+                return "path_complete"
+            
+            self._wait_logged = False
+            return "moving"
+        
+        elif self._state == self.STATE_WAITING_FOR_ESCORT:
+            # Log waiting message once
+            if not self._wait_logged:
+                if logger:
+                    logger.Add(f"Waiting for {self.escort_name} to catch up...", (1, 1, 0, 1))
+                self._wait_logged = True
+            
+            # Re-find escort if needed
+            if self._escort_id == 0 or not Agent.IsValid(self._escort_id):
+                self._escort_id = self._FindEscort()
+            
+            # Check if escort is close enough now
+            escort_dist = self._GetEscortDistance()
+            
+            if escort_dist > 0 and escort_dist <= self.max_escort_distance * 0.7:  # Some hysteresis
+                self._state = self.STATE_MOVING
+                if logger:
+                    logger.Add(f"{self.escort_name} caught up! Continuing...", (0, 1, 0, 1))
+                return "moving"
+            
+            # Timeout - continue anyway after 30 seconds
+            if self._timer.HasElapsed(30000):
+                if logger:
+                    logger.Add(f"Waited too long. Continuing without {self.escort_name}...", (1, 0.5, 0, 1), prefix="[Warn]")
+                self._state = self.STATE_MOVING
+                return "moving"
+            
+            return "waiting"
         
         return "moving"
 
@@ -1009,6 +1493,8 @@ class ScanWhileMovingMulti:
         self._logged_engage = False
         self._timer = Timer()
         self._timer.Start()
+        self._scan_timer = Timer()
+        self._scan_timer.Start()
     
     def Reset(self):
         """Reset the scanner state."""
@@ -1017,6 +1503,7 @@ class ScanWhileMovingMulti:
         self._killed_ids.clear()
         self._logged_engage = False
         self._timer.Reset()
+        self._scan_timer.Reset()
         self.path_handler.reset()
     
     def GetKillCount(self):
@@ -1024,6 +1511,47 @@ class ScanWhileMovingMulti:
         if self.kill_tracker:
             return self.kill_tracker.GetKillCount()
         return len(self._killed_ids)
+    
+    def _ScanForTargets(self):
+        """
+        Scan for target enemies, returns list of valid agent IDs.
+        Checks both enemy array and all living agents.
+        """
+        found = []
+        
+        # Check enemy array first
+        found.extend(EnemyFinder.FindAllEnemiesByName(
+            self.target_enemy_name,
+            self.scan_distance,
+            alive_only=True
+        ))
+        
+        # Also check all living agents for neutral targets
+        try:
+            player_pos = Player.GetXY()
+            all_agents = AgentArray.GetAgentArray()
+            all_agents = AgentArray.Filter.ByDistance(all_agents, player_pos, self.scan_distance)
+            
+            for agent_id in all_agents:
+                if agent_id in found:
+                    continue
+                try:
+                    if not Agent.IsValid(agent_id):
+                        continue
+                    if not Agent.IsLiving(agent_id):
+                        continue
+                    if not Agent.IsAlive(agent_id):
+                        continue
+                    
+                    agent_name = Agent.GetName(agent_id)
+                    if agent_name and self.target_enemy_name.lower() in agent_name.lower():
+                        found.append(agent_id)
+                except Exception:
+                    continue
+        except Exception:
+            pass
+        
+        return found
     
     def Execute(self, logger=None):
         """
@@ -1034,21 +1562,19 @@ class ScanWhileMovingMulti:
         """
         # Scan for target enemies while moving
         if self._state == self.STATE_MOVING:
-            # Find target enemies, excluding ones we've already killed
-            all_targets = EnemyFinder.FindAllEnemiesByName(
-                self.target_enemy_name,
-                self.scan_distance,
-                alive_only=True
-            )
-            
-            # Filter out already killed
-            valid_targets = [t for t in all_targets if t not in self._killed_ids]
-            
-            if valid_targets:
-                self._target_id = valid_targets[0]
-                self._state = self.STATE_ENGAGING
-                self._logged_engage = False
-                return "fighting"
+            # Scan periodically
+            if self._scan_timer.HasElapsed(500):
+                all_targets = self._ScanForTargets()
+                self._scan_timer.Reset()
+                
+                # Filter out already killed
+                valid_targets = [t for t in all_targets if t not in self._killed_ids]
+                
+                if valid_targets:
+                    self._target_id = valid_targets[0]
+                    self._state = self.STATE_ENGAGING
+                    self._logged_engage = False
+                    return "fighting"
         
         if self._state == self.STATE_MOVING:
             # Normal movement with combat handling

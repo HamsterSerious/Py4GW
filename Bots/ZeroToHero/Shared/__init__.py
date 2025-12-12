@@ -22,12 +22,14 @@ from .InteractionUtils import (
     GadgetInteractionState, 
     NPCInteractionHelper,
     EnemyFinder,
+    ItemFinder,  # NEW: Added ItemFinder for ground item detection
     TargetedKillState,
     ItemPickupState,
     WaitForHostileState,
     MultiKillTracker,
     ScanWhileMoving,
-    ScanWhileMovingMulti
+    ScanWhileMovingMulti,
+    EscortNavigation  # NEW: Follow path while staying near escort NPC
 )
 from .OutpostHandler import OutpostHandler
 from .CombatHandler import CombatHandler
@@ -44,8 +46,8 @@ __all__ = [
     'MapValidator', 'MissionStateTracker', 'MapWaiter',
     # Interaction
     'BundleHandler', 'BundlePickupState', 'GadgetInteractionState', 'NPCInteractionHelper',
-    'EnemyFinder', 'TargetedKillState', 'ItemPickupState', 'WaitForHostileState', 
-    'MultiKillTracker', 'ScanWhileMoving', 'ScanWhileMovingMulti',
+    'EnemyFinder', 'ItemFinder', 'TargetedKillState', 'ItemPickupState', 'WaitForHostileState', 
+    'MultiKillTracker', 'ScanWhileMoving', 'ScanWhileMovingMulti', 'EscortNavigation',
     # Outpost
     'OutpostHandler',
     # Combat & Navigation

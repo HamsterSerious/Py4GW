@@ -42,15 +42,17 @@ class OutpostHandler:
     STATE_VALIDATE_PARTY = 0
     STATE_FIND_NPC = 1
     STATE_MOVE_TO_NPC = 2
-    STATE_TARGET_NPC = 3
-    STATE_INTERACT_NPC = 4
-    STATE_WAIT_DIALOG_OPEN = 5
-    STATE_SEND_DIALOG = 6
-    STATE_WAIT_DIALOG = 7
-    STATE_NEXT_DIALOG = 8
-    STATE_ENTER_BUTTON = 9
-    STATE_WAIT_LOAD = 10
-    STATE_COMPLETE = 11
+    STATE_STOP_MOVING = 3      # NEW: Ensure we stop before targeting
+    STATE_TARGET_NPC = 4
+    STATE_WAIT_TARGET = 5      # NEW: Wait for target to register
+    STATE_INTERACT_NPC = 6
+    STATE_WAIT_DIALOG_OPEN = 7
+    STATE_SEND_DIALOG = 8
+    STATE_WAIT_DIALOG = 9
+    STATE_NEXT_DIALOG = 10
+    STATE_ENTER_BUTTON = 11
+    STATE_WAIT_LOAD = 12
+    STATE_COMPLETE = 13
     STATE_FAILED = -1
     
     def __init__(
@@ -63,8 +65,8 @@ class OutpostHandler:
         outpost_map_id=None,
         npc_search_radius=500,
         interact_distance=250,
-        dialog_wait_ms=1000,
-        dialog_open_wait_ms=800
+        dialog_wait_ms=1500,        # Increased from 1000
+        dialog_open_wait_ms=1200    # Increased from 800
     ):
         """
         Args:
@@ -96,7 +98,7 @@ class OutpostHandler:
         self._dialog_index = 0
         self._failure_reason = None
         self._interact_attempts = 0
-        self._max_interact_attempts = 3
+        self._max_interact_attempts = 5  # Increased from 3
         
         # Timers
         self._timer = Timer()
@@ -133,9 +135,10 @@ class OutpostHandler:
         """Get current state (for debugging)."""
         state_names = {
             0: "VALIDATE_PARTY", 1: "FIND_NPC", 2: "MOVE_TO_NPC",
-            3: "TARGET_NPC", 4: "INTERACT_NPC", 5: "WAIT_DIALOG_OPEN",
-            6: "SEND_DIALOG", 7: "WAIT_DIALOG", 8: "NEXT_DIALOG", 
-            9: "ENTER_BUTTON", 10: "WAIT_LOAD", 11: "COMPLETE", -1: "FAILED"
+            3: "STOP_MOVING", 4: "TARGET_NPC", 5: "WAIT_TARGET",
+            6: "INTERACT_NPC", 7: "WAIT_DIALOG_OPEN",
+            8: "SEND_DIALOG", 9: "WAIT_DIALOG", 10: "NEXT_DIALOG", 
+            11: "ENTER_BUTTON", 12: "WAIT_LOAD", 13: "COMPLETE", -1: "FAILED"
         }
         return state_names.get(self._state, "UNKNOWN")
     
@@ -182,8 +185,14 @@ class OutpostHandler:
         elif self._state == self.STATE_MOVE_TO_NPC:
             return self._ExecuteMoveToNPC(bot, logger)
         
+        elif self._state == self.STATE_STOP_MOVING:
+            return self._ExecuteStopMoving(bot, logger)
+        
         elif self._state == self.STATE_TARGET_NPC:
             return self._ExecuteTargetNPC(bot, logger)
+        
+        elif self._state == self.STATE_WAIT_TARGET:
+            return self._ExecuteWaitTarget(bot, logger)
         
         elif self._state == self.STATE_INTERACT_NPC:
             return self._ExecuteInteractNPC(bot, logger)
@@ -281,23 +290,52 @@ class OutpostHandler:
                 self._move_timer.Reset()
             return False
         
-        self._state = self.STATE_TARGET_NPC
+        # Close enough - stop moving first
+        self._state = self.STATE_STOP_MOVING
         self._timer.Reset()
+        return False
+    
+    def _ExecuteStopMoving(self, bot, logger):
+        """Stop all movement before targeting NPC."""
+        # Cancel any movement
+        player_pos = Player.GetXY()
+        Player.Move(player_pos[0], player_pos[1])  # Move to self = stop
+        
+        # Wait a moment for movement to stop
+        if self._timer.HasElapsed(300):
+            self._state = self.STATE_TARGET_NPC
+            self._timer.Reset()
         return False
     
     def _ExecuteTargetNPC(self, bot, logger):
         """Target the NPC."""
         Player.ChangeTarget(self._current_npc_id)
-        self._state = self.STATE_INTERACT_NPC
+        self._state = self.STATE_WAIT_TARGET
         self._timer.Reset()
+        return False
+    
+    def _ExecuteWaitTarget(self, bot, logger):
+        """Wait for target to register."""
+        # Verify target is set correctly
+        if self._timer.HasElapsed(500):
+            current_target = Player.GetTargetID()
+            if current_target != self._current_npc_id:
+                # Target didn't stick, retry
+                logger.Add("Re-targeting NPC...", (1, 1, 0, 1))
+                self._state = self.STATE_TARGET_NPC
+                return False
+            
+            self._state = self.STATE_INTERACT_NPC
+            self._timer.Reset()
         return False
     
     def _ExecuteInteractNPC(self, bot, logger):
         """Interact with NPC to open dialog."""
         # Wait a moment after targeting
-        if not self._timer.HasElapsed(300):
+        if not self._timer.HasElapsed(500):
             return False
         
+        logger.Add(f"Talking to {self.npc_name}...", (0, 1, 1, 1))
         Player.Interact(self._current_npc_id)
         self._state = self.STATE_WAIT_DIALOG_OPEN
         self._timer.Reset()
@@ -324,7 +362,7 @@ class OutpostHandler:
         
         dialog_id = self.dialog_sequence[self._dialog_index]
         
-        # Send dialog
+        # Send dialog (no logging of dialog ID - user doesn't need to see it)
         Player.SendDialog(dialog_id)
         
         self._state = self.STATE_WAIT_DIALOG
@@ -345,9 +383,9 @@ class OutpostHandler:
             logger.Add("Entering mission...", (0, 1, 0, 1))
             self._state = self.STATE_WAIT_LOAD
         else:
-            # Need to re-interact for next dialog
-            # Some dialogs close after each response
-            self._state = self.STATE_INTERACT_NPC
+            # For multi-dialog sequences, we might need to re-interact
+            # But first try just sending the next dialog
+            self._state = self.STATE_SEND_DIALOG
         
         self._timer.Reset()
         return False
@@ -374,8 +412,8 @@ class OutpostHandler:
             self._state = self.STATE_COMPLETE
             return True
         
-        # Timeout check (30 seconds) - try re-interacting
-        if self._timer.HasElapsed(15000):
+        # Timeout check - try re-interacting
+        if self._timer.HasElapsed(10000):  # Reduced from 15000 for faster retry
             self._interact_attempts += 1
             
             if self._interact_attempts >= self._max_interact_attempts:
@@ -383,10 +421,12 @@ class OutpostHandler:
                 self._state = self.STATE_FAILED
                 return False
             
-            logger.Add("Retrying mission start...", (1, 0.5, 0, 1), prefix="[Warn]")
-            # Go back to interact with NPC
+            logger.Add(f"Retrying mission start (attempt {self._interact_attempts}/{self._max_interact_attempts})...", (1, 0.5, 0, 1), prefix="[Warn]")
+            
+            # Go back to finding and targeting NPC
             self._dialog_index = 0
-            self._state = self.STATE_INTERACT_NPC
+            self._state = self.STATE_FIND_NPC
             self._timer.Reset()
+            self._search_timer.Reset()
         
         return False
