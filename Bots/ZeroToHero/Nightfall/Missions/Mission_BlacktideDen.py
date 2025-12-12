@@ -44,7 +44,7 @@ class BlacktideDen(BaseMission, MissionContext):
     Enemy_Grasp_Of_Chaos = "Grasp of Chaos"
     
     # --- ITEM NAME ---
-    Item_Corsair_Grab = "Corsair"  # Partial match for dropped item
+    Item_Corsair_Garb = "Corsair Garb"  # Partial match for dropped item
     
     # --- PATH DATA ---
     # Phase 1: To Ironfist's Envoy (scan for Ironfist during this movement)
