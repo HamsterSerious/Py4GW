@@ -5,7 +5,7 @@ This package provides reusable components for mission bots:
 - PartyUtils: Party validation, hero checks
 - AgentUtils: NPC/Gadget finding
 - MapUtils: Map validation, mission state tracking
-- InteractionUtils: Bundle handling, gadget interactions
+- InteractionUtils: Bundle handling, gadget interactions, enemy hunting, item pickup
 - OutpostHandler: Generic outpost state machine
 - CombatHandler: Combat execution
 - Navigation: Smart pathfinding with combat
@@ -16,7 +16,19 @@ This package provides reusable components for mission bots:
 from .PartyUtils import PartyRequirements, PartyValidator
 from .AgentUtils import AgentFinder, AgentPosition
 from .MapUtils import MapValidator, MissionStateTracker, MapWaiter
-from .InteractionUtils import BundleHandler, BundlePickupState, GadgetInteractionState, NPCInteractionHelper
+from .InteractionUtils import (
+    BundleHandler, 
+    BundlePickupState, 
+    GadgetInteractionState, 
+    NPCInteractionHelper,
+    EnemyFinder,
+    TargetedKillState,
+    ItemPickupState,
+    WaitForHostileState,
+    MultiKillTracker,
+    ScanWhileMoving,
+    ScanWhileMovingMulti
+)
 from .OutpostHandler import OutpostHandler
 from .CombatHandler import CombatHandler
 from .Navigation import MissionNavigation
@@ -32,6 +44,8 @@ __all__ = [
     'MapValidator', 'MissionStateTracker', 'MapWaiter',
     # Interaction
     'BundleHandler', 'BundlePickupState', 'GadgetInteractionState', 'NPCInteractionHelper',
+    'EnemyFinder', 'TargetedKillState', 'ItemPickupState', 'WaitForHostileState', 
+    'MultiKillTracker', 'ScanWhileMoving', 'ScanWhileMovingMulti',
     # Outpost
     'OutpostHandler',
     # Combat & Navigation

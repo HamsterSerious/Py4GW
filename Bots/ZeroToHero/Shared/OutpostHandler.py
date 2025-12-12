@@ -44,12 +44,13 @@ class OutpostHandler:
     STATE_MOVE_TO_NPC = 2
     STATE_TARGET_NPC = 3
     STATE_INTERACT_NPC = 4
-    STATE_SEND_DIALOG = 5
-    STATE_WAIT_DIALOG = 6
-    STATE_NEXT_DIALOG = 7
-    STATE_ENTER_BUTTON = 8
-    STATE_WAIT_LOAD = 9
-    STATE_COMPLETE = 10
+    STATE_WAIT_DIALOG_OPEN = 5
+    STATE_SEND_DIALOG = 6
+    STATE_WAIT_DIALOG = 7
+    STATE_NEXT_DIALOG = 8
+    STATE_ENTER_BUTTON = 9
+    STATE_WAIT_LOAD = 10
+    STATE_COMPLETE = 11
     STATE_FAILED = -1
     
     def __init__(
@@ -62,7 +63,8 @@ class OutpostHandler:
         outpost_map_id=None,
         npc_search_radius=500,
         interact_distance=250,
-        dialog_wait_ms=1500
+        dialog_wait_ms=1000,
+        dialog_open_wait_ms=800
     ):
         """
         Args:
@@ -75,6 +77,7 @@ class OutpostHandler:
             npc_search_radius (float): Radius to search for NPC
             interact_distance (float): Distance to stop and interact
             dialog_wait_ms (int): Time to wait between dialogs
+            dialog_open_wait_ms (int): Time to wait for dialog window to open
         """
         self.requirements = requirements or PartyRequirements()
         self.npc_position = npc_position
@@ -85,12 +88,15 @@ class OutpostHandler:
         self.npc_search_radius = npc_search_radius
         self.interact_distance = interact_distance
         self.dialog_wait_ms = dialog_wait_ms
+        self.dialog_open_wait_ms = dialog_open_wait_ms
         
         # State tracking
         self._state = self.STATE_VALIDATE_PARTY
         self._current_npc_id = 0
         self._dialog_index = 0
         self._failure_reason = None
+        self._interact_attempts = 0
+        self._max_interact_attempts = 3
         
         # Timers
         self._timer = Timer()
@@ -106,6 +112,7 @@ class OutpostHandler:
         self._current_npc_id = 0
         self._dialog_index = 0
         self._failure_reason = None
+        self._interact_attempts = 0
         self._timer.Reset()
         self._move_timer.Reset()
         self._search_timer.Reset()
@@ -126,9 +133,9 @@ class OutpostHandler:
         """Get current state (for debugging)."""
         state_names = {
             0: "VALIDATE_PARTY", 1: "FIND_NPC", 2: "MOVE_TO_NPC",
-            3: "TARGET_NPC", 4: "INTERACT_NPC", 5: "SEND_DIALOG",
-            6: "WAIT_DIALOG", 7: "NEXT_DIALOG", 8: "ENTER_BUTTON",
-            9: "WAIT_LOAD", 10: "COMPLETE", -1: "FAILED"
+            3: "TARGET_NPC", 4: "INTERACT_NPC", 5: "WAIT_DIALOG_OPEN",
+            6: "SEND_DIALOG", 7: "WAIT_DIALOG", 8: "NEXT_DIALOG", 
+            9: "ENTER_BUTTON", 10: "WAIT_LOAD", 11: "COMPLETE", -1: "FAILED"
         }
         return state_names.get(self._state, "UNKNOWN")
     
@@ -180,6 +187,9 @@ class OutpostHandler:
         
         elif self._state == self.STATE_INTERACT_NPC:
             return self._ExecuteInteractNPC(bot, logger)
+        
+        elif self._state == self.STATE_WAIT_DIALOG_OPEN:
+            return self._ExecuteWaitDialogOpen(bot, logger)
         
         elif self._state == self.STATE_SEND_DIALOG:
             return self._ExecuteSendDialog(bot, logger)
@@ -284,18 +294,27 @@ class OutpostHandler:
     
     def _ExecuteInteractNPC(self, bot, logger):
         """Interact with NPC to open dialog."""
-        if self._timer.HasElapsed(500):
-            Player.Interact(self._current_npc_id)
-            self._state = self.STATE_SEND_DIALOG
-            self._dialog_index = 0
-            self._timer.Reset()
+        # Wait a moment after targeting
+        if not self._timer.HasElapsed(300):
+            return False
+        
+        Player.Interact(self._current_npc_id)
+        self._state = self.STATE_WAIT_DIALOG_OPEN
+        self._timer.Reset()
+        return False
+    
+    def _ExecuteWaitDialogOpen(self, bot, logger):
+        """Wait for dialog window to open."""
+        if not self._timer.HasElapsed(self.dialog_open_wait_ms):
+            return False
+        
+        # Dialog should be open now, move to send
+        self._state = self.STATE_SEND_DIALOG
+        self._timer.Reset()
         return False
     
     def _ExecuteSendDialog(self, bot, logger):
         """Send the current dialog in sequence."""
-        if not self._timer.HasElapsed(self.dialog_wait_ms):
-            return False
-        
         if self._dialog_index >= len(self.dialog_sequence):
             # All dialogs sent
             logger.Add("Entering mission...", (0, 1, 0, 1))
@@ -304,7 +323,10 @@ class OutpostHandler:
             return False
         
         dialog_id = self.dialog_sequence[self._dialog_index]
+        
+        # Send dialog
         Player.SendDialog(dialog_id)
+        
         self._state = self.STATE_WAIT_DIALOG
         self._timer.Reset()
         return False
@@ -324,6 +346,7 @@ class OutpostHandler:
             self._state = self.STATE_WAIT_LOAD
         else:
             # Need to re-interact for next dialog
+            # Some dialogs close after each response
             self._state = self.STATE_INTERACT_NPC
         
         self._timer.Reset()
@@ -331,10 +354,17 @@ class OutpostHandler:
     
     def _ExecuteEnterButton(self, bot, logger):
         """Handle Enter Mission button (non-NPC missions)."""
-        # TODO: Implement Enter Mission button logic
-        logger.Add("Enter Mission button not yet implemented.", (1, 1, 0, 1), prefix="[TODO]")
-        self._state = self.STATE_WAIT_LOAD
-        self._timer.Reset()
+        # Use the Map.EnterChallenge() for missions with enter button
+        if Map.HasEnterChallengeButton():
+            logger.Add("Clicking Enter Mission...", (0, 1, 0, 1))
+            Map.EnterChallenge()
+            self._state = self.STATE_WAIT_LOAD
+            self._timer.Reset()
+        else:
+            # No button available, wait for it
+            if self._timer.HasElapsed(5000):
+                logger.Add("Waiting for Enter Mission button...", (1, 1, 0, 1))
+                self._timer.Reset()
         return False
     
     def _ExecuteWaitLoad(self, bot, logger):
@@ -344,9 +374,19 @@ class OutpostHandler:
             self._state = self.STATE_COMPLETE
             return True
         
-        # Timeout check (30 seconds)
-        if self._timer.HasElapsed(30000):
-            logger.Add("Still waiting for mission to load...", (1, 0.5, 0, 1), prefix="[Warn]")
+        # Timeout check (30 seconds) - try re-interacting
+        if self._timer.HasElapsed(15000):
+            self._interact_attempts += 1
+            
+            if self._interact_attempts >= self._max_interact_attempts:
+                logger.Add("Failed to start mission after multiple attempts.", (1, 0, 0, 1), prefix="[Error]")
+                self._state = self.STATE_FAILED
+                return False
+            
+            logger.Add("Retrying mission start...", (1, 0.5, 0, 1), prefix="[Warn]")
+            # Go back to interact with NPC
+            self._dialog_index = 0
+            self._state = self.STATE_INTERACT_NPC
             self._timer.Reset()
         
         return False
