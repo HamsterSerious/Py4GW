@@ -23,12 +23,17 @@ class MissionNavigation:
         
         self.combat_timer = Timer()
         self.combat_timer.Start()
+        
+        # FIX #4: Separate timer for stuck warning logging
+        self.stuck_log_timer = Timer()
+        self.stuck_log_timer.Start()
 
     def Reset(self):
         """Resets the navigation state."""
         self.movement_handler.reset()
         self.stuck_timer.Reset()
         self.combat_timer.Reset()
+        self.stuck_log_timer.Reset()
         self.waiting_for_aggro_clear = False
         self.last_pos = Player.GetXY()
 
@@ -45,6 +50,8 @@ class MissionNavigation:
         if enemies:
             # We have enemies. Fight them.
             target_id = enemies[0]
+            
+            # FIX #2: Actually engage the enemy
             self.combat_handler.Execute(target_agent_id=target_id)
             
             # Reset checks while fighting
@@ -73,13 +80,16 @@ class MissionNavigation:
         # If we barely moved (< 50 units) in the last 3 seconds
         if dist_moved < 50:
             if self.stuck_timer.HasElapsed(3000):
-                # We are blocked. Log it, but DO NOT return. 
-                # We continue to FollowPath so we move instantly when the gate opens.
-                if logger:
-                    logger.Add(f"Path blocked (Waiting for gate/obstacle)...", prefix="[Nav]")
+                # FIX #4: Only log every 10 seconds using separate timer
+                if self.stuck_log_timer.HasElapsed(10000):
+                    if logger:
+                        logger.Add(f"Path blocked (Waiting for gate/obstacle)...", (1.0, 0.5, 0.0, 1.0), prefix="[Nav]")
+                    self.stuck_log_timer.Reset()
+                # We are blocked but continue trying to move
         else:
             # We are moving fine, reset the stuck tracker
             self.stuck_timer.Reset()
+            self.stuck_log_timer.Reset()  # Also reset log timer when moving
             self.last_pos = (player_x, player_y)
 
         # --------------------------------------------------------

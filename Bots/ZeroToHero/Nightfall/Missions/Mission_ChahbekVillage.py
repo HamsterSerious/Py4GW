@@ -27,7 +27,7 @@ class ChahbekVillage(BaseMission, MissionContext):
 
     # --- CONFIGURATION ---
     Outpost_Map_ID = 544
-    Mission_Map_ID = 544
+    Mission_Map_ID = 544  # Same as outpost for Chahbek
     
     # NPC Position
     NPC_Jahdugar_Position = (3482, -5167)
@@ -78,6 +78,11 @@ class ChahbekVillage(BaseMission, MissionContext):
         
         # Track if we're holding a bundle (for oil)
         self._holding_bundle = False
+        
+        # FIX: Track mission state
+        self._mission_started = False  # True once we enter the mission instance
+        self._last_map_id = 0
+        self._cinematic_detected = False
 
     def Reset(self):
         """Reset mission state."""
@@ -89,6 +94,32 @@ class ChahbekVillage(BaseMission, MissionContext):
         self._debug_timer.Reset()
         self._current_npc_id = 0
         self._holding_bundle = False
+        self._mission_started = False
+        self._last_map_id = 0
+        self._cinematic_detected = False
+
+    def _CheckHeroInParty(self, hero_name):
+        """
+        Check if a specific hero is in the party.
+        Args:
+            hero_name (str): The name of the hero to check for (e.g., "Koss")
+        Returns:
+            bool: True if hero is in party, False otherwise
+        """
+        try:
+            heroes = Party.GetHeroes()
+            if not heroes:
+                return False
+            
+            for hero in heroes:
+                # Get the hero's name from the hero_id object
+                if hasattr(hero, 'hero_id'):
+                    name = hero.hero_id.GetName()
+                    if name.lower() == hero_name.lower():
+                        return True
+            return False
+        except Exception as e:
+            return False
 
     def FindNearestNPC(self, x, y, max_distance=300, logger=None):
         """Find the nearest NPC at given coordinates."""
@@ -154,17 +185,11 @@ class ChahbekVillage(BaseMission, MissionContext):
                 self._debug_timer.Reset()
             
             # Bundle types that indicate we're holding something
-            # When holding a bundle, the weapon type changes from normal weapon
-            # Common bundle indicators: "Bundle", "Item", "Environmental", "Unknown", or ID != normal weapon IDs
             bundle_type_names = ["Bundle", "Item", "Environmental", "Unknown", ""]
             
-            # If weapon type name is in bundle types, we're holding something
             if weapon_type_name in bundle_type_names:
                 return True
             
-            # Also check by ID - bundles often have specific IDs
-            # Normal weapons are typically 1-10, bundles might be 0 or higher numbers
-            # If ID is 0 and name is empty/Unknown, likely holding a bundle
             if weapon_type_id == 0:
                 return True
                 
@@ -175,25 +200,111 @@ class ChahbekVillage(BaseMission, MissionContext):
                 logger.Add(f"Error checking bundle: {e}", (1, 0, 0, 1), prefix="[Error]")
             return False
 
+    def _CheckMissionCompletion(self, bot, logger):
+        """
+        IMPROVED: Check if mission was completed.
+        Detects:
+        - Map change to ANY different map (not just outposts)
+        - Party defeat
+        - End cinematics
+        """
+        current_map = Map.GetMapID()
+        
+        # First call - initialize tracking
+        if self._last_map_id == 0:
+            self._last_map_id = current_map
+            return False
+        
+        # Check for party defeat first
+        if Party.IsPartyDefeated():
+            logger.Add("Party was defeated!", (1, 0, 0, 1), prefix="[Defeat]")
+            return True
+        
+        # Check for end cinematic (missions often end with a cutscene)
+        if Map.IsInCinematic():
+            if not self._cinematic_detected:
+                logger.Add("End cinematic detected...", (0, 1, 1, 1), prefix="[Cinematic]")
+                self._cinematic_detected = True
+            # Don't return True yet - wait for map transition after cinematic
+            return False
+        
+        # FIX: Check if map changed to ANY different map while in mission
+        if self._mission_started and current_map != self.Mission_Map_ID:
+            # We left the mission map!
+            map_name = Map.GetMapName(current_map)
+            if Map.IsOutpost():
+                logger.Add(f"Mission Complete! Arrived at {map_name} (ID: {current_map})", (0, 1, 0, 1), prefix="[Victory]")
+            else:
+                logger.Add(f"Mission ended. Transitioned to {map_name} (ID: {current_map})", (0, 1, 0, 1), prefix="[Complete]")
+            return True
+        
+        # Update tracking
+        self._last_map_id = current_map
+        return False
+
+    def _VerifyCorrectMap(self, bot, logger):
+        """
+        Verify we're on the correct map for the current phase.
+        Returns False and stops the bot if on wrong map.
+        """
+        current_map = Map.GetMapID()
+        
+        # If we're in mission phase (step >= 3), we should be on the mission map
+        if self.step >= 3 and Map.IsExplorable():
+            if current_map != self.Mission_Map_ID:
+                map_name = Map.GetMapName(current_map)
+                logger.Add(f"Wrong map detected (ID: {current_map} - {map_name}). Mission may have ended.", (1, 0.5, 0, 1), prefix="[End]")
+                return False
+        
+        # If we're in outpost phase, verify we're at the right outpost
+        if self.step < 3 and Map.IsOutpost():
+            if current_map != self.Outpost_Map_ID:
+                logger.Add(f"Wrong Map ({current_map}). Go to Chahbek Village Outpost.", (1, 0, 0, 1))
+                return False
+        
+        return True
+
     def Execution_Routine(self, bot, logger):
         """Main execution routine."""
         current_map = Map.GetMapID()
         if current_map == 0:
             return
 
+        # Check for mission completion (map change, defeat, etc.)
+        if self._mission_started and self._CheckMissionCompletion(bot, logger):
+            bot.is_running = False
+            return
+
+        # Handle map loading state
+        if Map.IsMapLoading():
+            return
+
         if Map.IsExplorable():
+            # VERIFY we're on the correct mission map
+            if current_map != self.Mission_Map_ID:
+                map_name = Map.GetMapName(current_map)
+                logger.Add(f"Not on mission map. Current: {map_name} (ID: {current_map}). Mission ended or wrong location.", (1, 0.5, 0, 1), prefix="[End]")
+                bot.is_running = False
+                return
+            
             if self.step <= 2:
                 if self.step < 3:
                     logger.Add("Mission Instance Detected. Starting Logic...", (0, 1, 0, 1))
                     self.step = 3
                     self.sub_state = 0
+                    self._mission_started = True  # Mark that we've entered the mission
             
             self.ExecuteMissionLogic(bot, logger)
             return
 
         elif Map.IsOutpost():
             if current_map != self.Outpost_Map_ID:
-                logger.Add(f"Wrong Map ({current_map}). Go to Chahbek Village Outpost.", (1, 0, 0, 1))
+                # We're in a different outpost - mission might have completed
+                if self._mission_started:
+                    map_name = Map.GetMapName(current_map)
+                    logger.Add(f"Mission Complete! Arrived at {map_name}", (0, 1, 0, 1), prefix="[Victory]")
+                else:
+                    logger.Add(f"Wrong Map ({current_map}). Go to Chahbek Village Outpost.", (1, 0, 0, 1))
                 bot.is_running = False
                 return
             
@@ -213,7 +324,13 @@ class ChahbekVillage(BaseMission, MissionContext):
                     bot.is_running = False
                     return
 
-                logger.Add("Party validated. Finding Jahdugar...", (0, 1, 0, 1))
+                # Check if Koss is in the party
+                if not self._CheckHeroInParty("Koss"):
+                    logger.Add("Koss is required for this mission! Add Koss to your party.", (1, 0, 0, 1), prefix="[Error]")
+                    bot.is_running = False
+                    return
+
+                logger.Add("Party validated (Koss found). Finding Jahdugar...", (0, 1, 0, 1))
                 self.sub_state = 1
                 self.timer.Reset()
                 self._move_timer.Reset()
@@ -369,6 +486,20 @@ class ChahbekVillage(BaseMission, MissionContext):
     def ExecuteMissionLogic(self, bot, logger):
         """Mission instance logic."""
         
+        # Verify we're still on the mission map
+        current_map = Map.GetMapID()
+        if current_map != self.Mission_Map_ID:
+            map_name = Map.GetMapName(current_map)
+            logger.Add(f"Left mission map. Now at {map_name} (ID: {current_map})", (0, 1, 0, 1), prefix="[Complete]")
+            bot.is_running = False
+            return
+        
+        # Check for party defeat
+        if Party.IsPartyDefeated():
+            logger.Add("Party was defeated!", (1, 0, 0, 1), prefix="[Defeat]")
+            bot.is_running = False
+            return
+        
         # --- COMBAT MOVEMENT PHASE ---
         if self.step == 3:
             self.ExecuteMove(self.paths["Step1"], 4, logger, "Clearing Group 1")
@@ -456,8 +587,11 @@ class ChahbekVillage(BaseMission, MissionContext):
             self.ExecuteMove(self.paths["KillCommander"], 21, logger, "Engaging Commander!")
 
         elif self.step == 21:
-            logger.Add("Mission Complete!", (0, 1, 0, 1), prefix="[Victory]")
-            bot.is_running = False
+            # Stay in this step - map change detection will handle completion
+            # The mission completes automatically when objectives are met
+            if not hasattr(self, '_final_phase_logged') or not self._final_phase_logged:
+                logger.Add("Commander area reached. Waiting for mission completion...", (0, 1, 1, 1), prefix="[Final]")
+                self._final_phase_logged = True
 
     def _ExecuteOilPickup(self, next_step, logger, log_msg):
         """
