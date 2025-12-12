@@ -144,6 +144,7 @@ class BlacktideDen(BaseMission, MissionContext):
         # Item pickup handler
         self._item_pickup = None
         self._last_ironfist_pos = None
+        self._item_spawn_timer = None  # Timer to wait for item to spawn
         
         # NPC interaction state
         self._besuz_npc_id = 0
@@ -154,11 +155,14 @@ class BlacktideDen(BaseMission, MissionContext):
         # Bonus tracker
         self.rinkhal_tracker = MultiKillTracker(self.Enemy_Rinkhal_Monitor, required_kills=5)
         
-        # Track killed Rinkhals during escort phase
-        self._escort_killed_rinkhals = set()
+        # === FIXED: Track Rinkhals during escort phase with persistent state ===
+        self._escort_killed_rinkhals = set()  # IDs of killed Rinkhals
+        self._current_rinkhal_target = 0       # Currently fighting this Rinkhal
+        self._rinkhal_engage_logged = False    # Have we logged "engaging combat"?
         
         # State flags
         self._ironfist_killed = False
+        self._ironfist_engage_logged = False  # Track if we logged Ironfist detection
         self._item_picked_up = False
         self._cutscene_wait_done = False
         self._besuz_talked = False
@@ -181,6 +185,7 @@ class BlacktideDen(BaseMission, MissionContext):
         self._item_pickup = None
         self._boss_wait = None
         self._last_ironfist_pos = None
+        self._item_spawn_timer = None
         
         # Reset NPC state
         self._besuz_npc_id = 0
@@ -188,7 +193,10 @@ class BlacktideDen(BaseMission, MissionContext):
         # Reset trackers
         self.rinkhal_tracker.Reset()
         self._escort_killed_rinkhals.clear()
+        self._current_rinkhal_target = 0
+        self._rinkhal_engage_logged = False
         self._ironfist_killed = False
+        self._ironfist_engage_logged = False
         self._item_picked_up = False
         self._cutscene_wait_done = False
         self._besuz_talked = False
@@ -269,10 +277,14 @@ class BlacktideDen(BaseMission, MissionContext):
                 )
             
             # Track Ironfist's position when found (for item pickup later)
+            # Also log detection message
             if self._ironfist_scanner._target_id != 0 and self._last_ironfist_pos is None:
                 try:
                     if Agent.IsValid(self._ironfist_scanner._target_id):
                         self._last_ironfist_pos = Agent.GetXY(self._ironfist_scanner._target_id)
+                        if not self._ironfist_engage_logged:
+                            logger.Add("Ironfist's Envoy detected, engaging combat!", (1, 0.5, 0, 1), prefix="[Target]")
+                            self._ironfist_engage_logged = True
                 except:
                     pass
             
@@ -285,23 +297,28 @@ class BlacktideDen(BaseMission, MissionContext):
                 logger.Add("Ironfist's Envoy eliminated!", (0, 1, 0, 1))
                 self.step = 4
                 self.sub_state = 0
-                self.timer.Reset()
+                # Start timer to wait for item to spawn
+                self._item_spawn_timer = Timer()
+                self._item_spawn_timer.Start()
             
             if result == "path_complete":
                 if self._ironfist_killed:
                     self.step = 4
                     self.sub_state = 0
-                    self.timer.Reset()
+                    self._item_spawn_timer = Timer()
+                    self._item_spawn_timer.Start()
                 else:
                     logger.Add("Reached destination. Looking for dropped items...", (1, 1, 0, 1), prefix="[Warn]")
                     self._last_ironfist_pos = self.Ironfist_Death_Position
                     self.step = 4
                     self.sub_state = 0
-                    self.timer.Reset()
+                    self._item_spawn_timer = Timer()
+                    self._item_spawn_timer.Start()
         
-        # ===== PHASE 2: Wait a moment then pick up Corsair Garb =====
+        # ===== PHASE 2: Wait for item to spawn, then pick up Corsair Garb =====
         elif self.step == 4:
-            if not self.timer.HasElapsed(2000):
+            # FIXED: Wait 3.5 seconds for item to spawn (was 2 seconds)
+            if self._item_spawn_timer and not self._item_spawn_timer.HasElapsed(3500):
                 return
             
             if self._item_pickup is None:
@@ -310,9 +327,9 @@ class BlacktideDen(BaseMission, MissionContext):
                 self._item_pickup = ItemPickupState(
                     item_name=self.Item_Corsair_Garb,
                     near_position=search_pos,
-                    max_distance=1500,
-                    pickup_distance=200,
-                    timeout_ms=20000
+                    max_distance=2000,  # FIXED: Increased from 1500
+                    pickup_distance=150,  # FIXED: Reduced from 200 for more reliable pickup
+                    timeout_ms=25000  # FIXED: Increased from 20000
                 )
             
             result = self._item_pickup.Execute(logger)
@@ -326,13 +343,14 @@ class BlacktideDen(BaseMission, MissionContext):
                 self.timer.Reset()
             elif result == "failed":
                 logger.Add("Looking for any nearby item...", (1, 0.5, 0, 1), prefix="[Warn]")
-                nearest_item = ItemFinder.FindNearestItem(max_distance=1500)
+                nearest_item = ItemFinder.FindNearestItem(max_distance=2000)
                 if nearest_item != 0:
                     logger.Add("Found an item! Attempting pickup...", (1, 1, 0, 1))
                     self._item_pickup = ItemPickupState(
                         near_position=Agent.GetXY(nearest_item),
-                        max_distance=500,
-                        timeout_ms=10000
+                        max_distance=800,
+                        pickup_distance=150,
+                        timeout_ms=15000
                     )
                 else:
                     logger.Add("No items found. Continuing anyway...", (1, 0.5, 0, 1), prefix="[Warn]")
@@ -377,41 +395,7 @@ class BlacktideDen(BaseMission, MissionContext):
         
         # ===== PHASE 6: Continue mission after Besuz WITH ESCORT =====
         elif self.step == 8:
-            if self._escort_nav is None:
-                logger.Add("Following Captain Besuz... Hunting Rinkhal Monitors!", (0, 1, 1, 1), prefix="[Mission]")
-                self._path_after_besuz = Routines.Movement.PathHandler(self.Path_AfterCaptainBesuz)
-                self._escort_nav = EscortNavigation(
-                    path_handler=self._path_after_besuz,
-                    escort_name=self.Captain_Besuz_Name,
-                    combat_handler=self.combat_handler,
-                    navigation=self.nav,
-                    max_escort_distance=1500,
-                    escort_search_distance=5000
-                )
-            
-            # Also scan for Rinkhals while escorting
-            rinkhal_id = EnemyFinder.FindEnemyByName(self.Enemy_Rinkhal_Monitor, 2500, alive_only=True)
-            if rinkhal_id != 0 and rinkhal_id not in self._escort_killed_rinkhals:
-                # Found a Rinkhal - kill it
-                self.combat_handler.Execute(target_agent_id=rinkhal_id)
-                if EnemyFinder.IsEnemyDead(rinkhal_id):
-                    self._escort_killed_rinkhals.add(rinkhal_id)
-                    self.rinkhal_tracker.RegisterKill()
-                    logger.Add(f"Rinkhal Monitor killed! ({self.rinkhal_tracker.GetProgress()})", (0, 1, 0, 1), prefix="[Kill]")
-                return
-            
-            result = self._escort_nav.Execute(logger)
-            
-            if result == "path_complete":
-                # Log bonus status
-                if self.rinkhal_tracker.IsComplete():
-                    logger.Add("BONUS COMPLETE: All Rinkhal Monitors killed!", (0, 1, 0, 1), prefix="[Bonus]")
-                else:
-                    progress = self.rinkhal_tracker.GetProgress()
-                    logger.Add(f"Bonus progress: {progress} Rinkhal Monitors", (1, 1, 0, 1), prefix="[Bonus]")
-                
-                self.step = 9
-                self.sub_state = 0
+            self._ExecuteEscortPhase(bot, logger)
         
         # ===== PHASE 7: Move to boss arena =====
         elif self.step == 9:
@@ -450,6 +434,99 @@ class BlacktideDen(BaseMission, MissionContext):
         # ===== PHASE 9: Kill General Kahyet and Grasp of Chaos =====
         elif self.step == 11:
             self._ExecuteBossFight(bot, logger)
+
+    def _ExecuteEscortPhase(self, bot, logger):
+        """
+        Execute the escort phase after talking to Captain Besuz.
+        
+        Two sub-phases:
+        1. Hunt all 5 Rinkhal Monitors freely (no escort proximity check)
+        2. After all 5 killed, regroup with Besuz and enable close-follow
+        """
+        # Initialize path if needed (but NOT escort nav yet)
+        if self._path_after_besuz is None:
+            logger.Add("Hunting Rinkhal Monitors!", (0, 1, 1, 1), prefix="[Mission]")
+            self._path_after_besuz = Routines.Movement.PathHandler(self.Path_AfterCaptainBesuz)
+        
+        # === RINKHAL HUNTING (always active until all 5 killed) ===
+        if not self.rinkhal_tracker.IsComplete():
+            # Check if we're currently fighting a Rinkhal
+            if self._current_rinkhal_target != 0:
+                # Verify target is still valid
+                if not Agent.IsValid(self._current_rinkhal_target):
+                    # Target became invalid - likely dead
+                    if self._current_rinkhal_target not in self._escort_killed_rinkhals:
+                        self._escort_killed_rinkhals.add(self._current_rinkhal_target)
+                        self.rinkhal_tracker.RegisterKill()
+                        logger.Add(f"Rinkhal Monitor killed! ({self.rinkhal_tracker.GetProgress()})", (0, 1, 0, 1), prefix="[Bonus]")
+                        # Check if that was the last one
+                        if self.rinkhal_tracker.IsComplete():
+                            logger.Add("BONUS COMPLETE: All 5 Rinkhal Monitors killed!", (0, 1, 0, 1), prefix="[Bonus]")
+                            logger.Add("Regrouping with Captain Besuz...", (0, 1, 1, 1), prefix="[Mission]")
+                    self._current_rinkhal_target = 0
+                    self._rinkhal_engage_logged = False
+                elif EnemyFinder.IsEnemyDead(self._current_rinkhal_target):
+                    # Target is confirmed dead
+                    if self._current_rinkhal_target not in self._escort_killed_rinkhals:
+                        self._escort_killed_rinkhals.add(self._current_rinkhal_target)
+                        self.rinkhal_tracker.RegisterKill()
+                        logger.Add(f"Rinkhal Monitor killed! ({self.rinkhal_tracker.GetProgress()})", (0, 1, 0, 1), prefix="[Bonus]")
+                        # Check if that was the last one
+                        if self.rinkhal_tracker.IsComplete():
+                            logger.Add("BONUS COMPLETE: All 5 Rinkhal Monitors killed!", (0, 1, 0, 1), prefix="[Bonus]")
+                            logger.Add("Regrouping with Captain Besuz...", (0, 1, 1, 1), prefix="[Mission]")
+                    self._current_rinkhal_target = 0
+                    self._rinkhal_engage_logged = False
+                else:
+                    # Target still alive - keep fighting!
+                    Player.ChangeTarget(self._current_rinkhal_target)
+                    self.combat_handler.Execute(target_agent_id=self._current_rinkhal_target)
+                    return  # Don't move while fighting
+            
+            # Not currently fighting - scan for new Rinkhals
+            rinkhal_id = EnemyFinder.FindEnemyByName(self.Enemy_Rinkhal_Monitor, 2500, alive_only=True)
+            if rinkhal_id != 0 and rinkhal_id not in self._escort_killed_rinkhals:
+                # Found a new Rinkhal - start tracking it
+                self._current_rinkhal_target = rinkhal_id
+                self._rinkhal_engage_logged = False
+                
+                # Log detection message
+                if not self._rinkhal_engage_logged:
+                    logger.Add(f"Rinkhal Monitor detected, engaging combat! ({self.rinkhal_tracker.GetProgress()})", (1, 0.5, 0, 1), prefix="[Target]")
+                    self._rinkhal_engage_logged = True
+                
+                Player.ChangeTarget(rinkhal_id)
+                self.combat_handler.Execute(target_agent_id=rinkhal_id)
+                return  # Don't move while fighting
+            
+            # No Rinkhal to fight - use REGULAR navigation (no escort proximity check)
+            # This lets us freely hunt Rinkhals without waiting for Besuz
+            if self.nav.Execute(self._path_after_besuz, logger):
+                # Path complete but Rinkhals not all killed - continue to boss anyway
+                progress = self.rinkhal_tracker.GetProgress()
+                logger.Add(f"Path complete. Bonus progress: {progress} Rinkhal Monitors", (1, 1, 0, 1), prefix="[Bonus]")
+                self.step = 9
+                self.sub_state = 0
+            return
+        
+        # === ALL RINKHALS KILLED - NOW USE ESCORT NAVIGATION ===
+        # Create escort navigation if not yet created
+        if self._escort_nav is None:
+            self._escort_nav = EscortNavigation(
+                path_handler=self._path_after_besuz,
+                escort_name=self.Captain_Besuz_Name,
+                combat_handler=self.combat_handler,
+                navigation=self.nav,
+                max_escort_distance=1500,
+                escort_search_distance=5000
+            )
+        
+        # Execute escort navigation with proximity check
+        result = self._escort_nav.Execute(logger)
+        
+        if result == "path_complete":
+            self.step = 9
+            self.sub_state = 0
 
     def _ExecuteCaptainBesuzInteraction(self, bot, logger):
         """Handle talking to Captain Besuz to continue the mission."""

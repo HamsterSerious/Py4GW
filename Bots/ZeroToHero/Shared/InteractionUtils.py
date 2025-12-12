@@ -717,10 +717,10 @@ class TargetedKillState:
             return "engaging"
         
         elif self._state == self.STATE_ENGAGE:
-            # Target and engage the enemy
+            # Target and engage the enemy - UPDATED LOG MESSAGE
             if not self._logged_engage:
                 if logger:
-                    logger.Add(f"Engaging {self.enemy_name}!", (1, 0.5, 0, 1), prefix="[Combat]")
+                    logger.Add(f"{self.enemy_name} detected, engaging combat!", (1, 0.5, 0, 1), prefix="[Target]")
                 self._logged_engage = True
             
             Player.ChangeTarget(self._target_id)
@@ -826,11 +826,13 @@ class ItemPickupState:
             return ItemFinder.FindItemByModelID(self.model_id, self.max_distance)
         
         # Method 2: By position (find any item near a spot)
+        # FIXED: Use larger radius (was 800, now uses max_distance/2 or 1500)
         if self.near_position:
+            search_radius = min(self.max_distance, 1500)
             return ItemFinder.FindItemNearPosition(
                 self.near_position[0], 
                 self.near_position[1], 
-                min(self.max_distance, 800)  # Tighter radius for position search
+                search_radius
             )
         
         # Method 3: By name (legacy, less reliable)
@@ -1230,9 +1232,10 @@ class ScanWhileMoving:
             return "moving"
         
         elif self._state == self.STATE_ENGAGING:
+            # UPDATED: Changed log message to "detected, engaging combat!"
             if not self._logged_engage:
                 if logger:
-                    logger.Add(f"Found {self.target_enemy_name}! Engaging...", (1, 0.5, 0, 1), prefix="[Target]")
+                    logger.Add(f"{self.target_enemy_name} detected, engaging combat!", (1, 0.5, 0, 1), prefix="[Target]")
                 self._logged_engage = True
             
             Player.ChangeTarget(self._target_id)
@@ -1583,12 +1586,13 @@ class ScanWhileMovingMulti:
             return "moving"
         
         elif self._state == self.STATE_ENGAGING:
+            # UPDATED: Changed log message to "detected, engaging combat!"
             if not self._logged_engage:
                 if logger:
                     progress = ""
                     if self.kill_tracker:
                         progress = f" ({self.kill_tracker.GetProgress()})"
-                    logger.Add(f"Found {self.target_enemy_name}!{progress} Engaging...", (1, 0.5, 0, 1), prefix="[Target]")
+                    logger.Add(f"{self.target_enemy_name} detected, engaging combat!{progress}", (1, 0.5, 0, 1), prefix="[Target]")
                 self._logged_engage = True
             
             Player.ChangeTarget(self._target_id)
@@ -1618,7 +1622,7 @@ class ScanWhileMovingMulti:
                     self.kill_tracker.RegisterKill()
                     progress = self.kill_tracker.GetProgress()
                     if logger:
-                        logger.Add(f"{self.target_enemy_name} killed! ({progress})", (0, 1, 0, 1), prefix="[Kill]")
+                        logger.Add(f"{self.target_enemy_name} killed! ({progress})", (0, 1, 0, 1), prefix="[Bonus]")
                 else:
                     if logger:
                         logger.Add(f"{self.target_enemy_name} killed!", (0, 1, 0, 1), prefix="[Kill]")
