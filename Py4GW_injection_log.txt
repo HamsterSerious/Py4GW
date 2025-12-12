@@ -32,3 +32,28 @@
 2025-12-10 21:03:04 [INFO] Terminating DLL...
 2025-12-10 21:12:15 [INFO] Terminating DLL...
 2025-12-11 01:09:44 [INFO] Terminating DLL...
+2025-12-12 07:43:43 [INFO] ############ StoCMgr initialization completed ############
+2025-12-12 07:43:45 [INFO] Terminating DLL...
+2025-12-12 07:44:25 [INFO] ############ StoCMgr initialization completed ############
+2025-12-12 07:49:50 [INFO] ############ StoCMgr initialization completed ############
+2025-12-12 08:17:29 [INFO] Terminating DLL...
+2025-12-12 08:37:16 [INFO] ############ StoCMgr initialization completed ############
+2025-12-12 08:43:30 [INFO] ############ StoCMgr initialization completed ############
+2025-12-12 08:58:18 [INFO] ############ StoCMgr initialization completed ############
+2025-12-12 09:06:21 [INFO] ############ StoCMgr initialization completed ############
+2025-12-12 09:55:08 [INFO] ############ StoCMgr initialization completed ############
+2025-12-12 10:37:53 [INFO] ############ StoCMgr initialization completed ############
+2025-12-12 10:56:55 [INFO] Terminating DLL...
+2025-12-12 10:58:31 [INFO] ############ StoCMgr initialization completed ############
+2025-12-12 11:01:38 [INFO] ############ StoCMgr initialization completed ############
+2025-12-12 11:07:30 [INFO] ############ StoCMgr initialization completed ############
+2025-12-12 12:32:17 [INFO] ############ StoCMgr initialization completed ############
+2025-12-12 12:37:54 [INFO] ############ StoCMgr initialization completed ############
+2025-12-12 12:49:26 [INFO] ############ StoCMgr initialization completed ############
+2025-12-12 12:52:07 [INFO] Terminating DLL...
+2025-12-12 13:03:38 [INFO] ############ StoCMgr initialization completed ############
+2025-12-12 13:33:38 [INFO] ############ StoCMgr initialization completed ############
+2025-12-12 14:17:11 [INFO] ############ StoCMgr initialization completed ############
+2025-12-12 14:22:32 [INFO] ############ StoCMgr initialization completed ############
+2025-12-12 14:26:16 [INFO] ############ StoCMgr initialization completed ############
+2025-12-12 14:46:17 [INFO] ############ StoCMgr initialization completed ############
