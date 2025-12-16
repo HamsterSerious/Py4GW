@@ -13,6 +13,11 @@ class BaseTask:
         self.recommended_builds = []
         self.hm_tips = ""
         
+        # --- Mandatory Loadout Configuration ---
+        # Subclasses should populate this dictionary if specific requirements exist.
+        # Structure matches the JSON format used in Mission_Example.py
+        self.mandatory_loadout = {} 
+        
         # --- Requirements (Auto-Checked) ---
         self.start_map_id = 0  # 0 = No specific map required
         self.requires_quest_id = 0 # 0 = No specific quest required
@@ -34,7 +39,8 @@ class BaseTask:
             "Description": self.description,
             "Type": self.task_type,
             "Recommended_Builds": self.recommended_builds,
-            "HM_Tips": self.hm_tips
+            "HM_Tips": self.hm_tips,
+            "Mandatory_Loadout": self.mandatory_loadout
         }
 
     def PreRunCheck(self, bot):
