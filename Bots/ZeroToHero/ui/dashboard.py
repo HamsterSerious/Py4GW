@@ -7,7 +7,10 @@ from Py4GWCoreLib.ImGui_src.WindowModule import WindowModule
 from Py4GWCoreLib.ImGui_src.IconsFontAwesome5 import IconsFontAwesome5
 from Py4GWCoreLib.GlobalCache import GLOBAL_CACHE
 
-from core.constants import BOT_NAME, WINDOW_SIZE, BOT_VERSION, BOT_AUTHOR, Colors, TASK_FILTER_OPTIONS
+from core.constants import (
+    BOT_NAME, WINDOW_SIZE, BOT_VERSION, BOT_AUTHOR, Colors, 
+    TASK_FILTER_OPTIONS, get_campaign_display_name
+)
 from data.enums import TaskType, GameMode
 from ui.themes import Theme
 
@@ -124,10 +127,13 @@ class DashboardUI:
         self._draw_queue_controls()
     
     def _draw_campaign_selector(self):
-        """Campaign dropdown."""
+        """Campaign dropdown with display names."""
         PyImGui.text("Select Campaign:")
         if self.bot.campaign_list:
-            new_idx = PyImGui.combo("##Campaign", self.bot.selected_campaign_idx, self.bot.campaign_list)
+            # Build display names list
+            display_names = [get_campaign_display_name(c) for c in self.bot.campaign_list]
+            
+            new_idx = PyImGui.combo("##Campaign", self.bot.selected_campaign_idx, display_names)
             if new_idx != self.bot.selected_campaign_idx:
                 self.bot.selected_campaign_idx = new_idx
                 self.bot.current_campaign = self.bot.campaign_list[new_idx]

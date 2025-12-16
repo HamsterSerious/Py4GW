@@ -6,7 +6,7 @@ import Py4GW
 from Py4GWCoreLib.GlobalCache import GLOBAL_CACHE
 from Py4GWCoreLib.enums_src.Hero_enums import HeroType
 
-from core.constants import BOT_NAME, Colors
+from core.constants import BOT_NAME, Colors, NOTIFICATION_WINDOW_SIZE
 from data.enums import TaskType, GameMode
 
 
@@ -19,11 +19,18 @@ class NotificationWindow:
             bot: Reference to ZeroToHeroBot instance
         """
         self.bot = bot
+        self.first_run = True
     
     def draw(self):
         """Draw the notification window if there are pending notifications."""
         if not self.bot.pending_notifications:
+            self.first_run = True
             return
+        
+        # Set initial window size on first open
+        if self.first_run:
+            PyImGui.set_next_window_size(*NOTIFICATION_WINDOW_SIZE)
+            self.first_run = False
         
         PyImGui.push_style_color(PyImGui.ImGuiCol.TitleBg, Colors.WARN_COLOR)
         PyImGui.push_style_color(PyImGui.ImGuiCol.TitleBgActive, Colors.WARN_COLOR)

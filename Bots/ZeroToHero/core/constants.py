@@ -5,12 +5,15 @@ Constants and configuration values for Zero To Hero bot.
 # Bot Identity
 BOT_NAME = "ZeroToHero"
 BOT_VERSION = "0.2.0"
-BOT_AUTHOR = "YourName"
+BOT_AUTHOR = "Paul"
 
 # Window Configuration
-WINDOW_SIZE = (400, 500)
+WINDOW_SIZE = (450, 600)  # Main dashboard (wider + taller)
+QUEUE_WINDOW_SIZE = (400, 350)  # Queue manager (larger)
+TASK_INFO_WINDOW_SIZE = (500, 300)  # Task info (wider, shorter)
+NOTIFICATION_WINDOW_SIZE = (550, 350)  # Requirement warning (wider, shorter)
 
-# Campaign display order (for UI sorting)
+# Campaign display order (folder names)
 CAMPAIGN_ORDER = [
     "prophecies",
     "factions",
@@ -19,8 +22,23 @@ CAMPAIGN_ORDER = [
     "extra"
 ]
 
+# Campaign display names (folder name -> display name)
+CAMPAIGN_DISPLAY_NAMES = {
+    "prophecies": "Prophecies (Missions + Main Quests)",
+    "factions": "Factions (Missions + Main Quests)",
+    "nightfall": "Nightfall (Missions + Main Quests)",
+    "eye_of_the_north": "Eye of the North (Missions + Main Quests)",
+    "eotn": "Eye of the North (Missions + Main Quests)",
+    "extra": "Extra (Skill Unlocks etc.)"
+}
+
 # Task filter options for UI dropdown
 TASK_FILTER_OPTIONS = ["All", "Mission", "Quest", "Task"]
+
+
+def get_campaign_display_name(folder_name: str) -> str:
+    """Get the display name for a campaign folder."""
+    return CAMPAIGN_DISPLAY_NAMES.get(folder_name, folder_name.replace("_", " ").title())
 
 
 class Colors:

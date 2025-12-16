@@ -4,7 +4,7 @@ Queue management window for reordering and removing tasks.
 import PyImGui
 from Py4GWCoreLib.ImGui_src.IconsFontAwesome5 import IconsFontAwesome5
 
-from core.constants import Colors
+from core.constants import Colors, QUEUE_WINDOW_SIZE
 from data.enums import TaskType
 
 
@@ -17,11 +17,18 @@ class QueueWindow:
             bot: Reference to ZeroToHeroBot instance
         """
         self.bot = bot
+        self.first_run = True
     
     def draw(self):
         """Draw the queue window."""
         if not self.bot.show_queue_window:
+            self.first_run = True
             return
+        
+        # Set initial window size on first open
+        if self.first_run:
+            PyImGui.set_next_window_size(*QUEUE_WINDOW_SIZE)
+            self.first_run = False
         
         if PyImGui.begin("Queue Manager", 0):
             PyImGui.text_colored("Execution Queue", Colors.HEADER)

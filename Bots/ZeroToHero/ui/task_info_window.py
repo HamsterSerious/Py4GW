@@ -2,8 +2,9 @@
 Task information window displaying mission/quest details.
 """
 import PyImGui
+import Py4GW
 
-from core.constants import Colors
+from core.constants import BOT_NAME, Colors, TASK_INFO_WINDOW_SIZE
 from data.enums import TaskType, GameMode
 
 
@@ -16,11 +17,18 @@ class TaskInfoWindow:
             bot: Reference to ZeroToHeroBot instance
         """
         self.bot = bot
+        self.first_run = True
     
     def draw(self):
         """Draw the task info window."""
         if not self.bot.show_task_info_window:
+            self.first_run = True
             return
+        
+        # Set initial window size on first open
+        if self.first_run:
+            PyImGui.set_next_window_size(*TASK_INFO_WINDOW_SIZE)
+            self.first_run = False
         
         if PyImGui.begin("Task Details", 0):
             try:
@@ -44,6 +52,19 @@ class TaskInfoWindow:
             self.bot.current_campaign,
             self.bot.selected_task_name
         )
+    
+    def _draw_clickable_build(self, build_code, label):
+        """Draw a build code that can be clicked to copy."""
+        if not build_code or build_code == "Any":
+            PyImGui.text(f"{label}: Any")
+            return
+        
+        PyImGui.text_colored(f"{label}: {build_code}", (0.7, 1.0, 0.7, 1.0))
+        if PyImGui.is_item_hovered():
+            PyImGui.set_tooltip("Click to Copy Build Code")
+        if PyImGui.is_item_clicked(0):
+            PyImGui.set_clipboard_text(build_code)
+            Py4GW.Console.Log(BOT_NAME, "Build code copied to clipboard.", Py4GW.Console.MessageType.Info)
     
     def _draw_task_info(self, task_class):
         """Draw the task information."""
@@ -148,7 +169,7 @@ class TaskInfoWindow:
                 PyImGui.text("Player Builds:")
                 for prof, code in pb.builds.items():
                     PyImGui.bullet()
-                    PyImGui.text(f"{prof}: {code}")
+                    self._draw_clickable_build(code, prof)
             
             if pb.equipment:
                 PyImGui.text("Equipment:")
@@ -165,13 +186,12 @@ class TaskInfoWindow:
         if loadout.required_heroes:
             PyImGui.text("Required Heroes:")
             for h in loadout.required_heroes:
+                PyImGui.bullet()
                 if h.hero_id > 0:
-                    PyImGui.bullet()
-                    PyImGui.text(f"Hero {h.hero_id}: {h.build or 'Any'}")
+                    hero_label = f"Hero {h.hero_id}"
                 else:
-                    PyImGui.bullet()
-                    role = h.role or "Strategy Hero"
-                    PyImGui.text(f"{role}: {h.build or 'Any'}")
+                    hero_label = h.role or "Strategy Hero"
+                self._draw_clickable_build(h.build, hero_label)
         
         # Notes
         if loadout.notes:
@@ -206,9 +226,9 @@ class TaskInfoWindow:
                 PyImGui.text("Player Builds:")
                 for prof, code in pb.items():
                     PyImGui.bullet()
-                    PyImGui.text(f"{prof}: {code}")
+                    self._draw_clickable_build(code, prof)
             else:
-                PyImGui.text(f"Player: {pb}")
+                self._draw_clickable_build(pb, "Player")
         
         # Equipment
         if "Equipment" in reqs and reqs["Equipment"]:
@@ -239,10 +259,10 @@ class TaskInfoWindow:
                 h_id = h.get('HeroID', 0)
                 PyImGui.bullet()
                 if h_id > 0:
-                    PyImGui.text(f"Hero {h_id}: {h.get('Build', 'Any')}")
+                    hero_label = f"Hero {h_id}"
                 else:
-                    role = h.get("Role", "Strategy Hero")
-                    PyImGui.text(f"{role}: {h.get('Build', 'Any')}")
+                    hero_label = h.get("Role", "Strategy Hero")
+                self._draw_clickable_build(h.get('Build', 'Any'), hero_label)
         
         # Notes
         if "Notes" in reqs and reqs["Notes"]:
