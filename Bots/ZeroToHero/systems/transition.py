@@ -2,6 +2,7 @@ import Py4GW
 from Py4GWCoreLib import *
 from Py4GWCoreLib.GlobalCache import GLOBAL_CACHE
 
+
 class Transition:
     def __init__(self):
         pass
@@ -43,18 +44,13 @@ class Transition:
             GLOBAL_CACHE.Party.SetHardMode(False)
             yield from Routines.Yield.wait(1000)
 
-        # 2. Determine Party Size & Mode String
-        party_size = 4 # Default
+        # 2. Determine Party Size from game (uses built-in function)
         try:
-            # Map specific party size logic could go here or be fetched from map data
-            # For now assuming standard outpost limits or passed via config
-            # Actually, let's just use the max party size of the current map? 
-            # Or usually missions imply size. 
-            # Let's try to detect from map or default to 8 for now if unknown.
-            # In a real scenario, map_id to size mapping is best.
-            party_size = 8 # Placeholder, ideally Map.GetMaxPartySize() if available
-        except:
-            pass
+            party_size = GLOBAL_CACHE.Map.GetMaxPartySize()
+            Py4GW.Console.Log("Transition", f"Max party size for this map: {party_size}", Py4GW.Console.MessageType.Info)
+        except Exception as e:
+            Py4GW.Console.Log("Transition", f"Failed to get party size, defaulting to 8: {e}", Py4GW.Console.MessageType.Warning)
+            party_size = 8
 
         mode_str = "HM" if use_hard_mode else "NM"
         
@@ -79,7 +75,7 @@ class Transition:
                 party_size, 
                 mode_str, 
                 mandatory_list,
-                mission_name=bot.current_task_instance.name # Pass mission name for strategy hero lookup
+                mission_name=bot.current_task_instance.name
             )
         else:
             yield from bot.team_manager.LoadTeam(party_size, mode_str)
