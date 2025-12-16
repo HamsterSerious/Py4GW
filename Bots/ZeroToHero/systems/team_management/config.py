@@ -3,6 +3,8 @@ import json
 import copy
 import Py4GW
 from Py4GWCoreLib.GlobalCache import GLOBAL_CACHE
+from data.enums import HeroID
+from utils.string_utils import sanitize_string
 
 
 class TeamConfigManager:
@@ -43,11 +45,11 @@ class TeamConfigManager:
             raw_name = GLOBAL_CACHE.Player.GetName()
             if not raw_name:
                 return False
-            self.character_name = self._sanitize_string(raw_name)
+            self.character_name = sanitize_string(raw_name)
         
         # Setup paths
         base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
-        config_dir = os.path.join(base_dir, "Configs")
+        config_dir = os.path.join(base_dir, "configs")
         
         if not os.path.exists(config_dir):
             os.makedirs(config_dir)
@@ -98,7 +100,7 @@ class TeamConfigManager:
         try:
             # Sanitize all string data
             sanitized_profiles = self._sanitize_profiles(self.profiles)
-            sanitized_names = {k: self._sanitize_string(v) for k, v in self.custom_hero_names.items()}
+            sanitized_names = {k: sanitize_string(v) for k, v in self.custom_hero_names.items()}
             
             save_data = {
                 "profiles": sanitized_profiles,
@@ -148,7 +150,7 @@ class TeamConfigManager:
     
     def set_custom_hero_name(self, hero_id, name):
         """Sets a custom name for a hero."""
-        self.custom_hero_names[str(hero_id)] = self._sanitize_string(name)
+        self.custom_hero_names[str(hero_id)] = sanitize_string(name)
     
     # --- Mission Hero Assignment ---
     
@@ -182,7 +184,7 @@ class TeamConfigManager:
     def _populate_default_merc_names(self):
         """Adds default names for mercenary heroes."""
         if not self.custom_hero_names:
-            from .Enums import HeroID
+            from data.enums import HeroID
             for i in range(1, 9):
                 enum_name = f"MercenaryHero{i}"
                 if hasattr(HeroID, enum_name):
@@ -225,15 +227,9 @@ class TeamConfigManager:
                 "heroes": [
                     {
                         "hero_id": h["hero_id"],
-                        "build": self._sanitize_string(h["build"])
+                        "build": sanitize_string(h["build"])
                     }
                     for h in profile["heroes"]
                 ]
             }
         return sanitized
-    
-    def _sanitize_string(self, s):
-        """Removes null bytes and strips whitespace."""
-        if isinstance(s, str):
-            return s.replace('\0', '').strip()
-        return s

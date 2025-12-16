@@ -1,5 +1,6 @@
 import PyImGui
-from .Enums import HeroID
+from data.enums import HeroID
+from utils.string_utils import sanitize_string
 
 
 class TeamManagerUI:
@@ -179,7 +180,7 @@ class TeamManagerUI:
             new_build = PyImGui.input_text("##Build", hero["build"], 64)
             
             # Sanitize and update
-            new_build = self._sanitize_string(new_build)
+            new_build = sanitize_string(new_build)
             if new_build != hero["build"]:
                 hero["build"] = new_build
             
@@ -219,7 +220,7 @@ class TeamManagerUI:
         # Name input
         current_custom = custom_name or ""
         new_val = PyImGui.input_text("Custom Name", current_custom, 64)
-        new_val = self._sanitize_string(new_val)
+        new_val = sanitize_string(new_val)
         
         if new_val != current_custom:
             self.config.set_custom_hero_name(self.selected_rename_hero_id, new_val)
@@ -244,9 +245,3 @@ class TeamManagerUI:
                 return name
         
         return f"Hero {hero_id}"
-    
-    def _sanitize_string(self, s):
-        """Removes null bytes and strips whitespace."""
-        if isinstance(s, str):
-            return s.replace('\0', '').strip()
-        return s

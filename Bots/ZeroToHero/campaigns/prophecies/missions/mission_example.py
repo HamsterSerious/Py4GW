@@ -1,5 +1,5 @@
-from Bots.ZeroToHero.Modules.BaseTask import BaseTask
-from Bots.ZeroToHero.Modules.Common.Enums import HeroID
+from core.base_task import BaseTask
+from data.enums import HeroID
 import Py4GW
 
 class Mission_Example(BaseTask):

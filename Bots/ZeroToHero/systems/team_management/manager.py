@@ -1,9 +1,9 @@
 import Py4GW
 from Py4GWCoreLib import Routines
-from .TeamConfigManager import TeamConfigManager
-from .TeamComposer import TeamComposer
-from .BuildValidator import BuildValidator
-from .TeamManagerUI import TeamManagerUI
+from .config import TeamConfigManager
+from .composer import TeamComposer
+from .validator import BuildValidator
+from .ui import TeamManagerUI
 
 
 class TeamManager:
@@ -12,7 +12,7 @@ class TeamManager:
     Delegates responsibilities to specialized classes:
     - TeamConfigManager: Configuration persistence
     - TeamComposer: Hero recruitment and builds
-    - BuildValidator: Testing and verification
+    - BuildValidator: Testing and verification 
     - TeamManagerUI: User interface
     """
     
