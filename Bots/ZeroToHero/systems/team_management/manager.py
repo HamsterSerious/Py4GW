@@ -1,5 +1,15 @@
+"""
+Team Manager - Coordinator for team management operations.
+
+Delegates responsibilities to specialized classes:
+- TeamConfigManager: Configuration persistence
+- TeamComposer: Hero recruitment and builds
+- BuildValidator: Testing and verification 
+- TeamManagerUI: User interface
+"""
 import Py4GW
 from Py4GWCoreLib import Routines
+
 from .config import TeamConfigManager
 from .composer import TeamComposer
 from .validator import BuildValidator
@@ -9,11 +19,6 @@ from .ui import TeamManagerUI
 class TeamManager:
     """
     Coordinator for team management operations.
-    Delegates responsibilities to specialized classes:
-    - TeamConfigManager: Configuration persistence
-    - TeamComposer: Hero recruitment and builds
-    - BuildValidator: Testing and verification 
-    - TeamManagerUI: User interface
     """
     
     def __init__(self, bot):
@@ -34,7 +39,9 @@ class TeamManager:
         self.test_routine = None  # Active test coroutine
         self.initialized = False
     
-    # --- Public API ---
+    # ==================
+    # PUBLIC API
+    # ==================
     
     def Initialize(self):
         """
@@ -49,7 +56,11 @@ class TeamManager:
         if success:
             self.ui.refresh_hero_list()
             self.initialized = True
-            Py4GW.Console.Log("TeamManager", "Initialized.", Py4GW.Console.MessageType.Info)
+            Py4GW.Console.Log(
+                "TeamManager", 
+                "Initialized.", 
+                Py4GW.Console.MessageType.Info
+            )
         
         return success
     
@@ -63,18 +74,32 @@ class TeamManager:
                 next(self.test_routine)
             except StopIteration:
                 self.test_routine = None
-                Py4GW.Console.Log("TeamManager", "Test Sequence Complete.", Py4GW.Console.MessageType.Success)
+                Py4GW.Console.Log(
+                    "TeamManager", 
+                    "Test Sequence Complete.", 
+                    Py4GW.Console.MessageType.Success
+                )
             except Exception as e:
                 self.test_routine = None
                 import traceback
-                Py4GW.Console.Log("TeamManager", f"Test Sequence Crash: {e}", Py4GW.Console.MessageType.Error)
-                Py4GW.Console.Log("TeamManager", traceback.format_exc(), Py4GW.Console.MessageType.Error)
+                Py4GW.Console.Log(
+                    "TeamManager", 
+                    f"Test Sequence Crash: {e}", 
+                    Py4GW.Console.MessageType.Error
+                )
+                Py4GW.Console.Log(
+                    "TeamManager", 
+                    traceback.format_exc(), 
+                    Py4GW.Console.MessageType.Error
+                )
     
     def DrawWindow(self):
         """Draws the team setup UI. Call this every frame."""
         self.ui.draw()
     
-    # --- Configuration ---
+    # ==================
+    # CONFIGURATION
+    # ==================
     
     def HasValidConfig(self):
         """Returns True if configuration has been set up."""
@@ -90,7 +115,9 @@ class TeamManager:
         if self.config.save():
             self.ui.refresh_hero_list()
     
-    # --- Team Loading ---
+    # ==================
+    # TEAM LOADING
+    # ==================
     
     def LoadTeam(self, party_size, mode="NM"):
         """
@@ -105,7 +132,11 @@ class TeamManager:
         self.is_party_ready = False
         
         profile = self.config.get_profile(party_size, mode)
-        Py4GW.Console.Log("TeamManager", f"Loading Profile: [{party_size}_{mode}]", Py4GW.Console.MessageType.Info)
+        Py4GW.Console.Log(
+            "TeamManager", 
+            f"Loading Profile: [{party_size}_{mode}]", 
+            Py4GW.Console.MessageType.Info
+        )
         
         # Disband existing party
         self.composer.disband_party()
@@ -119,7 +150,11 @@ class TeamManager:
         )
         
         self.is_party_ready = True
-        Py4GW.Console.Log("TeamManager", "Party Assembled.", Py4GW.Console.MessageType.Success)
+        Py4GW.Console.Log(
+            "TeamManager", 
+            "Party Assembled.", 
+            Py4GW.Console.MessageType.Success
+        )
     
     def LoadTeamWithMandatoryHeroes(self, party_size, mode, mandatory_list, mission_name=""):
         """
@@ -136,9 +171,11 @@ class TeamManager:
         self.is_party_ready = False
         
         profile = self.config.get_profile(party_size, mode)
-        Py4GW.Console.Log("TeamManager", 
-                         f"Loading Profile: [{party_size}_{mode}] with {len(mandatory_list)} mandatory heroes.", 
-                         Py4GW.Console.MessageType.Info)
+        Py4GW.Console.Log(
+            "TeamManager", 
+            f"Loading Profile: [{party_size}_{mode}] with {len(mandatory_list)} mandatory heroes.", 
+            Py4GW.Console.MessageType.Info
+        )
         
         # Disband existing party
         self.composer.disband_party()
@@ -155,7 +192,11 @@ class TeamManager:
         )
         
         self.is_party_ready = True
-        Py4GW.Console.Log("TeamManager", "Party Assembled.", Py4GW.Console.MessageType.Success)
+        Py4GW.Console.Log(
+            "TeamManager", 
+            "Party Assembled.", 
+            Py4GW.Console.MessageType.Success
+        )
     
     def IsPartyReady(self):
         """Returns True if party is assembled."""
@@ -170,7 +211,9 @@ class TeamManager:
         """Loads a build onto a hero that's already in party."""
         self.composer.load_build_to_hero(hero_id, build_code)
     
-    # --- Mission Hero Assignments ---
+    # ==================
+    # MISSION HERO ASSIGNMENTS
+    # ==================
     
     def GetAssignedHero(self, mission_name, slot_index, default_hero_id=0):
         """Gets the hero assigned to a mission's flexible slot."""
@@ -181,11 +224,17 @@ class TeamManager:
         if self.config.set_assigned_hero(mission_name, slot_index, hero_id):
             self.config.save()
     
-    # --- Testing ---
+    # ==================
+    # TESTING
+    # ==================
     
     def start_test_load(self, party_size, mode):
         """Starts a test load routine."""
-        Py4GW.Console.Log("TeamManager", f"Test Load Initiated for [{party_size}_{mode}]", Py4GW.Console.MessageType.Info)
+        Py4GW.Console.Log(
+            "TeamManager", 
+            f"Test Load Initiated for [{party_size}_{mode}]", 
+            Py4GW.Console.MessageType.Info
+        )
         self.test_routine = self.LoadTeam(party_size, mode)
     
     def TestPlayerLoadout(self, build_code, expected_skills=8):
@@ -207,7 +256,9 @@ class TeamManager:
             get_hero_name_fn=self.ui.get_hero_display_name
         )
     
-    # --- UI Control ---
+    # ==================
+    # UI CONTROL
+    # ==================
     
     @property
     def show_window(self):

@@ -1,39 +1,76 @@
 """
-String utility functions used across the bot.
-Centralizes string sanitization and formatting.
+String utilities for Zero To Hero bot.
 """
+import re
 
 
-def sanitize_string(s):
+def sanitize_string(text: str) -> str:
     """
-    Removes null bytes and strips whitespace from strings.
+    Sanitize a string for safe storage and display.
+    
+    Removes or escapes potentially problematic characters while
+    preserving normal text, numbers, and common punctuation.
     
     Args:
-        s: Input string or other type
+        text: Input string to sanitize
         
     Returns:
-        Sanitized string, or original value if not a string
+        Sanitized string safe for JSON storage and UI display
     """
-    if isinstance(s, str):
-        return s.replace('\0', '').strip()
-    return s
+    if not text:
+        return ""
+    
+    # Convert to string if needed
+    text = str(text)
+    
+    # Remove null bytes and other control characters (except newlines/tabs)
+    text = re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]', '', text)
+    
+    # Strip leading/trailing whitespace
+    text = text.strip()
+    
+    return text
 
 
-def sanitize_dict_strings(data):
+def truncate_string(text: str, max_length: int, suffix: str = "...") -> str:
     """
-    Recursively sanitizes all strings in a dictionary.
+    Truncate a string to a maximum length.
     
     Args:
-        data: Dictionary or nested structure
+        text: Input string
+        max_length: Maximum length including suffix
+        suffix: String to append when truncated
         
     Returns:
-        Sanitized copy of the data
+        Truncated string with suffix if it was shortened
     """
-    if isinstance(data, dict):
-        return {k: sanitize_dict_strings(v) for k, v in data.items()}
-    elif isinstance(data, list):
-        return [sanitize_dict_strings(item) for item in data]
-    elif isinstance(data, str):
-        return sanitize_string(data)
-    else:
-        return data
+    if not text or len(text) <= max_length:
+        return text
+    
+    return text[:max_length - len(suffix)] + suffix
+
+
+def is_valid_build_code(code: str) -> bool:
+    """
+    Check if a string looks like a valid GW build template code.
+    
+    Build codes are base64-encoded strings that typically:
+    - Start with 'O' (for skills template)
+    - Are 20+ characters long
+    - Contain only alphanumeric characters and +/=
+    
+    Args:
+        code: Potential build code string
+        
+    Returns:
+        True if it looks like a valid build code
+    """
+    if not code or len(code) < 10:
+        return False
+    
+    if code == "Any":
+        return True
+    
+    # Check for valid base64-ish characters
+    valid_chars = set('ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=')
+    return all(c in valid_chars for c in code)

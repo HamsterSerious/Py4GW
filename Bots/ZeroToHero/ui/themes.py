@@ -1,29 +1,50 @@
 """
-UI theme management and styling helpers.
+UI Theme configuration for Zero To Hero bot.
+Centralized styling to maintain consistent look.
+
+Note: PyImGui in Py4GW has limited style support.
+This module provides safe no-op wrappers that can be extended
+once the available PyImGui API is determined.
 """
-import PyImGui
-from core.constants import Colors
 
 
 class Theme:
-    """Manages ImGui styling and theme application."""
+    """
+    Centralized theme management for the bot UI.
     
-    @staticmethod
-    def push_styles():
-        """Apply the bot's color scheme to ImGui."""
-        PyImGui.push_style_color(PyImGui.ImGuiCol.Text, Colors.BODY_TEXT)
-        PyImGui.push_style_color(PyImGui.ImGuiCol.Separator, Colors.SEPARATOR)
-        PyImGui.push_style_color(PyImGui.ImGuiCol.Button, Colors.BUTTON)
-        PyImGui.push_style_color(PyImGui.ImGuiCol.ButtonHovered, Colors.BUTTON_HOVER)
-        PyImGui.push_style_color(PyImGui.ImGuiCol.ButtonActive, Colors.BUTTON_ACTIVE)
-        PyImGui.push_style_color(PyImGui.ImGuiCol.FrameBg, Colors.FRAME_BG)
-        PyImGui.push_style_color(PyImGui.ImGuiCol.FrameBgHovered, Colors.FRAME_HOVER)
-        PyImGui.push_style_color(PyImGui.ImGuiCol.FrameBgActive, Colors.FRAME_ACTIVE)
-        PyImGui.push_style_color(PyImGui.ImGuiCol.Header, Colors.BUTTON)
-        PyImGui.push_style_color(PyImGui.ImGuiCol.HeaderHovered, Colors.BUTTON_HOVER)
-        PyImGui.push_style_color(PyImGui.ImGuiCol.HeaderActive, Colors.BUTTON_ACTIVE)
+    Currently provides no-op methods since PyImGui.ImGuiStyleVar
+    is not available in the Py4GW wrapper. These can be filled in
+    once the correct API is discovered.
+    """
     
-    @staticmethod
-    def pop_styles():
-        """Remove applied styles."""
-        PyImGui.pop_style_color(11)
+    @classmethod
+    def push_styles(cls):
+        """Push common style modifications. Currently a no-op."""
+        # PyImGui.ImGuiStyleVar not available in Py4GW
+        # Add styling here once correct API is known
+        pass
+    
+    @classmethod
+    def pop_styles(cls):
+        """Pop style modifications. Currently a no-op."""
+        pass
+    
+    @classmethod
+    def push_button_success(cls):
+        """Push green button style. Currently a no-op."""
+        pass
+    
+    @classmethod
+    def push_button_danger(cls):
+        """Push red button style. Currently a no-op."""
+        pass
+    
+    @classmethod
+    def push_button_warning(cls):
+        """Push yellow/orange button style. Currently a no-op."""
+        pass
+    
+    @classmethod
+    def pop_button_style(cls):
+        """Pop button color modifications. Currently a no-op."""
+        pass

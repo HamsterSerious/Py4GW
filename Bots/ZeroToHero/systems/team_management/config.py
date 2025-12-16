@@ -1,20 +1,24 @@
+"""
+Team Configuration Manager - Handles persistence of team profiles.
+
+Responsibilities:
+- Loading/Saving JSON configs
+- Profile management (get, set, validate)
+- Custom hero name management
+- Mission-specific hero assignments
+"""
 import os
 import json
 import copy
 import Py4GW
 from Py4GWCoreLib.GlobalCache import GLOBAL_CACHE
-from data.enums import HeroID
+from Py4GWCoreLib.enums_src.Hero_enums import HeroType
 from utils.string_utils import sanitize_string
 
 
 class TeamConfigManager:
     """
     Handles all configuration file operations for team profiles.
-    Responsibilities:
-    - Loading/Saving JSON configs
-    - Profile management (get, set, validate)
-    - Custom hero name management
-    - Mission-specific hero assignments
     """
     
     def __init__(self, character_name=None):
@@ -85,16 +89,28 @@ class TeamConfigManager:
             self.custom_hero_names = data.get("custom_hero_names", {})
             self.mission_hero_assignments = data.get("mission_hero_assignments", {})
             
-            Py4GW.Console.Log("TeamConfigManager", "Configuration loaded.", Py4GW.Console.MessageType.Success)
+            Py4GW.Console.Log(
+                "TeamConfigManager", 
+                "Configuration loaded.", 
+                Py4GW.Console.MessageType.Success
+            )
             
         except Exception as e:
-            Py4GW.Console.Log("TeamConfigManager", f"Error loading config: {e}", Py4GW.Console.MessageType.Error)
+            Py4GW.Console.Log(
+                "TeamConfigManager", 
+                f"Error loading config: {e}", 
+                Py4GW.Console.MessageType.Error
+            )
             self._initialize_default_profiles()
     
     def save(self):
         """Saves configuration to disk."""
         if not self.config_path:
-            Py4GW.Console.Log("TeamConfigManager", "No config path set!", Py4GW.Console.MessageType.Error)
+            Py4GW.Console.Log(
+                "TeamConfigManager", 
+                "No config path set!", 
+                Py4GW.Console.MessageType.Error
+            )
             return False
         
         try:
@@ -112,21 +128,33 @@ class TeamConfigManager:
                 json.dump(save_data, f, indent=4)
             
             self.is_new_config = False
-            Py4GW.Console.Log("TeamConfigManager", "Configuration saved.", Py4GW.Console.MessageType.Success)
+            Py4GW.Console.Log(
+                "TeamConfigManager", 
+                "Configuration saved.", 
+                Py4GW.Console.MessageType.Success
+            )
             return True
             
         except Exception as e:
-            Py4GW.Console.Log("TeamConfigManager", f"Error saving config: {e}", Py4GW.Console.MessageType.Error)
+            Py4GW.Console.Log(
+                "TeamConfigManager", 
+                f"Error saving config: {e}", 
+                Py4GW.Console.MessageType.Error
+            )
             return False
     
-    # --- Profile Access ---
+    # ==================
+    # PROFILE ACCESS
+    # ==================
     
     def get_profile(self, party_size, mode):
         """
         Gets a team profile for the specified party size and mode.
+        
         Args:
             party_size: 4, 6, or 8
             mode: "NM" or "HM"
+            
         Returns:
             Profile dict with hero list
         """
@@ -142,7 +170,9 @@ class TeamConfigManager:
         """Returns all valid profile keys."""
         return ["4_NM", "4_HM", "6_NM", "6_HM", "8_NM", "8_HM"]
     
-    # --- Hero Name Management ---
+    # ==================
+    # HERO NAME MANAGEMENT
+    # ==================
     
     def get_custom_hero_name(self, hero_id):
         """Gets the custom name for a hero ID, or None if not set."""
@@ -152,7 +182,49 @@ class TeamConfigManager:
         """Sets a custom name for a hero."""
         self.custom_hero_names[str(hero_id)] = sanitize_string(name)
     
-    # --- Mission Hero Assignment ---
+    @staticmethod
+    def get_hero_nice_name(hero_id: int) -> str:
+        """
+        Gets the nice display name for a hero ID.
+        Uses HeroType enum from core lib.
+        """
+        if hero_id == 0:
+            return "None"
+        
+        try:
+            hero_type = HeroType(hero_id)
+            name = hero_type.name
+            
+            # Manual overrides for readability
+            overrides = {
+                "None_": "None",
+                "MasterOfWhispers": "Master of Whispers",
+                "AcolyteJin": "Acolyte Jin",
+                "AcolyteSousuke": "Acolyte Sousuke",
+                "ZhedShadowhoof": "Zhed Shadowhoof",
+                "GeneralMorgahn": "General Morgahn",
+                "MagridTheSly": "Magrid the Sly",
+                "KeiranThackeray": "Keiran Thackeray",
+                "PyreFierceshot": "Pyre Fierceshot",
+                "MercenaryHero1": "Mercenary Hero 1",
+                "MercenaryHero2": "Mercenary Hero 2",
+                "MercenaryHero3": "Mercenary Hero 3",
+                "MercenaryHero4": "Mercenary Hero 4",
+                "MercenaryHero5": "Mercenary Hero 5",
+                "MercenaryHero6": "Mercenary Hero 6",
+                "MercenaryHero7": "Mercenary Hero 7",
+                "MercenaryHero8": "Mercenary Hero 8",
+                "ZeiRi": "Zei Ri"
+            }
+            
+            return overrides.get(name, name)
+            
+        except ValueError:
+            return f"Unknown ({hero_id})"
+    
+    # ==================
+    # MISSION HERO ASSIGNMENT
+    # ==================
     
     def get_assigned_hero(self, mission_name, slot_index, default_hero_id=0):
         """Gets the hero assigned to a specific mission slot."""
@@ -167,13 +239,17 @@ class TeamConfigManager:
             return True  # Changed
         return False  # No change
     
-    # --- Validation ---
+    # ==================
+    # VALIDATION
+    # ==================
     
     def has_valid_config(self):
         """Returns True if configuration has been set up by the user."""
         return not self.is_new_config
     
-    # --- Private Helpers ---
+    # ==================
+    # PRIVATE HELPERS
+    # ==================
     
     def _initialize_default_profiles(self):
         """Creates default empty profiles for all party sizes."""
@@ -184,11 +260,10 @@ class TeamConfigManager:
     def _populate_default_merc_names(self):
         """Adds default names for mercenary heroes."""
         if not self.custom_hero_names:
-            from data.enums import HeroID
             for i in range(1, 9):
                 enum_name = f"MercenaryHero{i}"
-                if hasattr(HeroID, enum_name):
-                    hero_id = getattr(HeroID, enum_name)
+                if hasattr(HeroType, enum_name):
+                    hero_id = getattr(HeroType, enum_name)
                     self.custom_hero_names[str(hero_id.value)] = f"Mercenary {i}"
     
     def _convert_legacy_profiles(self, legacy_profiles):

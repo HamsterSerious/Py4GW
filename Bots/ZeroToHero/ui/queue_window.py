@@ -5,6 +5,7 @@ import PyImGui
 from Py4GWCoreLib.ImGui_src.IconsFontAwesome5 import IconsFontAwesome5
 
 from core.constants import Colors
+from data.enums import TaskType
 
 
 class QueueWindow:
@@ -26,7 +27,7 @@ class QueueWindow:
             PyImGui.text_colored("Execution Queue", Colors.HEADER)
             PyImGui.separator()
             
-            queue_len = len(self.bot.task_registry.task_queue)
+            queue_len = self.bot.task_registry.get_queue_length()
             
             if queue_len == 0:
                 PyImGui.text_disabled("Queue is empty.")
@@ -72,7 +73,7 @@ class QueueWindow:
             PyImGui.same_line(0.0, 5.0)
             
             # Mode indicator for missions
-            if task_type == "Mission":
+            if task_type == TaskType.MISSION:
                 if is_hm:
                     PyImGui.text_colored("[HM]", Colors.HM_COLOR)
                 else:

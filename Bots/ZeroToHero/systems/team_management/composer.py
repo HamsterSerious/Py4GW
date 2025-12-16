@@ -1,3 +1,12 @@
+"""
+Team Composer - Handles actual game actions for assembling teams.
+
+Responsibilities:
+- Recruiting heroes
+- Applying skill templates
+- Disbanding party
+- Finding hero slots
+"""
 import Py4GW
 from Py4GWCoreLib import Routines
 from Py4GWCoreLib.GlobalCache import GLOBAL_CACHE
@@ -6,11 +15,6 @@ from Py4GWCoreLib.GlobalCache import GLOBAL_CACHE
 class TeamComposer:
     """
     Handles the actual game actions for assembling teams.
-    Responsibilities:
-    - Recruiting heroes
-    - Applying skill templates
-    - Disbanding party
-    - Finding hero slots
     """
     
     def __init__(self):
@@ -20,7 +24,11 @@ class TeamComposer:
         """Kicks all heroes from the party."""
         if GLOBAL_CACHE.Party.GetHeroCount() > 0:
             GLOBAL_CACHE.Party.Heroes.KickAllHeroes()
-            Py4GW.Console.Log("TeamComposer", "Party disbanded.", Py4GW.Console.MessageType.Info)
+            Py4GW.Console.Log(
+                "TeamComposer", 
+                "Party disbanded.", 
+                Py4GW.Console.MessageType.Info
+            )
     
     def load_team(self, party_size, heroes, get_hero_name_fn=None):
         """
@@ -38,13 +46,17 @@ class TeamComposer:
         
         for i in range(min(slots_needed, len(heroes))):
             hero = heroes[i]
-            hero_id = hero["hero_id"]
-            build_code = hero["build"]
+            hero_id = hero.get("hero_id", 0)
+            build_code = hero.get("build", "")
             
             if hero_id > 0:
                 hero_name = get_hero_name_fn(hero_id) if get_hero_name_fn else f"Hero {hero_id}"
                 
-                Py4GW.Console.Log("TeamComposer", f"Slot {i + 1}: Adding {hero_name}", Py4GW.Console.MessageType.Info)
+                Py4GW.Console.Log(
+                    "TeamComposer", 
+                    f"Slot {i + 1}: Adding {hero_name}", 
+                    Py4GW.Console.MessageType.Info
+                )
                 
                 # Recruit hero
                 GLOBAL_CACHE.Party.Heroes.AddHero(hero_id)
@@ -83,7 +95,11 @@ class TeamComposer:
         for i, req in enumerate(mandatory_list):
             hero_id = final_heroes[i]["hero_id"] if i < len(final_heroes) else 0
             hero_name = get_hero_name_fn(hero_id) if (get_hero_name_fn and hero_id > 0) else f"Hero {hero_id}"
-            Py4GW.Console.Log("TeamComposer", f"Mandatory Slot {i+1}: {hero_name}", Py4GW.Console.MessageType.Info)
+            Py4GW.Console.Log(
+                "TeamComposer", 
+                f"Mandatory Slot {i+1}: {hero_name}", 
+                Py4GW.Console.MessageType.Info
+            )
         
         # Recruit the team
         yield from self.load_team(party_size, final_heroes, get_hero_name_fn)
@@ -103,14 +119,18 @@ class TeamComposer:
         try:
             GLOBAL_CACHE.SkillBar.LoadHeroSkillTemplate(party_slot, build_code)
         except Exception as e:
-            Py4GW.Console.Log("TeamComposer", f"Failed to load build: {e}", Py4GW.Console.MessageType.Warning)
+            Py4GW.Console.Log(
+                "TeamComposer", 
+                f"Failed to load build: {e}", 
+                Py4GW.Console.MessageType.Warning
+            )
     
     def find_hero_slot(self, hero_id):
         """
         Finds which party slot a hero occupies.
         
         Args:
-            hero_id: The HeroID to find
+            hero_id: The HeroType ID to find
         
         Returns:
             Party slot index (1-7) or -1 if not found
@@ -124,7 +144,9 @@ class TeamComposer:
             pass
         return -1
     
-    # --- Private Helpers ---
+    # ==================
+    # PRIVATE HELPERS
+    # ==================
     
     def _apply_build(self, party_slot, build_code, hero_name="Hero"):
         """Applies a build template to a hero slot."""
@@ -134,9 +156,17 @@ class TeamComposer:
         try:
             GLOBAL_CACHE.SkillBar.LoadHeroSkillTemplate(party_slot, build_code)
             yield from Routines.Yield.wait(200)
-            Py4GW.Console.Log("TeamComposer", f"Applied build to {hero_name}.", Py4GW.Console.MessageType.Info)
+            Py4GW.Console.Log(
+                "TeamComposer", 
+                f"Applied build to {hero_name}.", 
+                Py4GW.Console.MessageType.Info
+            )
         except Exception as e:
-            Py4GW.Console.Log("TeamComposer", f"Failed to apply build to {hero_name}: {e}", Py4GW.Console.MessageType.Warning)
+            Py4GW.Console.Log(
+                "TeamComposer", 
+                f"Failed to apply build to {hero_name}: {e}", 
+                Py4GW.Console.MessageType.Warning
+            )
     
     def _merge_mandatory_heroes(self, profile_heroes, mandatory_list, mission_name, get_assigned_hero_fn):
         """
@@ -144,7 +174,7 @@ class TeamComposer:
         
         Args:
             profile_heroes: List of hero dicts from profile
-            mandatory_list: List of requirement dicts
+            mandatory_list: List of requirement dicts (can be HeroRequirement dicts)
             mission_name: Name of mission
             get_assigned_hero_fn: Function to get assigned hero for flexible slots
         
@@ -162,16 +192,19 @@ class TeamComposer:
             if i >= len(result):
                 break  # Safety check
             
-            hero_id = req.get("HeroID", 0)
-            build_code = req.get("Build", "")
+            # Handle both dict and dataclass formats
+            hero_id = req.get("HeroID", 0) if isinstance(req, dict) else getattr(req, 'hero_id', 0)
+            build_code = req.get("Build", "") if isinstance(req, dict) else getattr(req, 'build', "")
             
-            # Resolve flexible heroes (HeroID = 0)
+            # Resolve flexible heroes (hero_id = 0)
             if hero_id == 0:
                 hero_id = get_assigned_hero_fn(mission_name, i)
                 if hero_id == 0:
-                    Py4GW.Console.Log("TeamComposer", 
-                                    f"Warning: No hero assigned for mandatory slot {i+1}!", 
-                                    Py4GW.Console.MessageType.Warning)
+                    Py4GW.Console.Log(
+                        "TeamComposer", 
+                        f"Warning: No hero assigned for mandatory slot {i+1}!", 
+                        Py4GW.Console.MessageType.Warning
+                    )
             
             # Update slot
             result[i] = {

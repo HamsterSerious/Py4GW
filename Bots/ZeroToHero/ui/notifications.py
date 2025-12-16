@@ -4,9 +4,10 @@ Notification window for displaying mandatory loadout requirements.
 import PyImGui
 import Py4GW
 from Py4GWCoreLib.GlobalCache import GLOBAL_CACHE
+from Py4GWCoreLib.enums_src.Hero_enums import HeroType
 
 from core.constants import BOT_NAME, Colors
-from data.enums import HeroID
+from data.enums import TaskType, GameMode
 
 
 class NotificationWindow:
@@ -62,7 +63,9 @@ class NotificationWindow:
     
     def _draw_player_build(self, reqs):
         """Draw player build requirements."""
-        if "Player_Build" not in reqs or not reqs["Player_Build"]:
+        # Handle both dict and dataclass formats
+        player_build = self._get_player_build(reqs)
+        if not player_build:
             return
         
         PyImGui.bullet()
@@ -74,7 +77,7 @@ class NotificationWindow:
         except:
             prim = "Unknown"
         
-        build_code = self._get_player_build_code(reqs["Player_Build"], prim)
+        build_code = self._get_player_build_code(player_build, prim)
         
         PyImGui.indent(0.0)
         if build_code and build_code != "No build for your profession":
@@ -83,7 +86,7 @@ class NotificationWindow:
             # Test button
             if len(build_code) > 10 and " " not in build_code and build_code != "Any":
                 if PyImGui.button(f"Test Loadout ({prim})", -1, 0):
-                    expected = reqs.get("Expected_Skills", 8)
+                    expected = self._get_expected_skills(reqs)
                     self.bot.team_manager.test_routine = self.bot.team_manager.TestPlayerLoadout(
                         build_code, expected
                     )
@@ -91,6 +94,23 @@ class NotificationWindow:
         else:
             PyImGui.text_colored("No mandatory build for your profession.", (0.7, 0.7, 0.7, 1.0))
         PyImGui.unindent(0.0)
+    
+    def _get_player_build(self, reqs):
+        """Extract player build from requirements (dict or dataclass)."""
+        if isinstance(reqs, dict):
+            return reqs.get("Player_Build")
+        # Dataclass format
+        if hasattr(reqs, 'player_build') and reqs.player_build:
+            return reqs.player_build.builds
+        return None
+    
+    def _get_expected_skills(self, reqs) -> int:
+        """Extract expected skills from requirements."""
+        if isinstance(reqs, dict):
+            return reqs.get("Expected_Skills", 8)
+        if hasattr(reqs, 'player_build') and reqs.player_build:
+            return reqs.player_build.expected_skills
+        return 8
     
     def _get_player_build_code(self, raw_build_data, profession):
         """Extract the appropriate build code for the player's profession."""
@@ -115,7 +135,8 @@ class NotificationWindow:
     
     def _draw_equipment(self, reqs):
         """Draw equipment requirements."""
-        if "Equipment" not in reqs or not reqs["Equipment"]:
+        equipment = self._get_equipment(reqs)
+        if not equipment:
             return
         
         PyImGui.dummy(0, 5)
@@ -123,19 +144,27 @@ class NotificationWindow:
         PyImGui.text("Equipment / Runes:")
         PyImGui.indent(0.0)
         
-        eq_data = reqs["Equipment"]
-        if isinstance(eq_data, dict):
-            for k, v in eq_data.items():
+        if isinstance(equipment, dict):
+            for k, v in equipment.items():
                 PyImGui.text_colored(f"{k}:", (0.8, 0.8, 0.8, 1.0))
                 PyImGui.same_line(0.0, -1.0)
                 PyImGui.text_wrapped(str(v))
         else:
-            PyImGui.text_wrapped(str(eq_data))
+            PyImGui.text_wrapped(str(equipment))
         PyImGui.unindent(0.0)
+    
+    def _get_equipment(self, reqs):
+        """Extract equipment from requirements."""
+        if isinstance(reqs, dict):
+            return reqs.get("Equipment")
+        if hasattr(reqs, 'player_build') and reqs.player_build:
+            return reqs.player_build.equipment
+        return None
     
     def _draw_weapons(self, reqs):
         """Draw weapon requirements."""
-        if "Weapons" not in reqs or not reqs["Weapons"]:
+        weapons = self._get_weapons(reqs)
+        if not weapons:
             return
         
         PyImGui.dummy(0, 5)
@@ -143,64 +172,81 @@ class NotificationWindow:
         PyImGui.text("Weapon Sets:")
         PyImGui.indent(0.0)
         
-        wep_data = reqs["Weapons"]
-        if isinstance(wep_data, dict):
-            for slot, desc in wep_data.items():
+        if isinstance(weapons, dict):
+            for slot, desc in weapons.items():
                 PyImGui.text_colored(f"[{slot}]:", (0.7, 1.0, 0.7, 1.0))
                 PyImGui.same_line(0.0, -1.0)
                 PyImGui.text_wrapped(str(desc))
-        elif isinstance(wep_data, list):
-            for item in wep_data:
+        elif isinstance(weapons, list):
+            for item in weapons:
                 PyImGui.bullet()
                 PyImGui.text_wrapped(str(item))
         else:
-            PyImGui.text_wrapped(str(wep_data))
+            PyImGui.text_wrapped(str(weapons))
         PyImGui.unindent(0.0)
+    
+    def _get_weapons(self, reqs):
+        """Extract weapons from requirements."""
+        if isinstance(reqs, dict):
+            return reqs.get("Weapons")
+        if hasattr(reqs, 'player_build') and reqs.player_build:
+            return reqs.player_build.weapons
+        return None
     
     def _draw_required_heroes(self, reqs, mission_name):
         """Draw required heroes section."""
-        if "Required_Heroes" not in reqs or not reqs["Required_Heroes"]:
+        heroes = self._get_required_heroes(reqs)
+        if not heroes:
             return
         
         PyImGui.dummy(0, 5)
         PyImGui.bullet()
         PyImGui.text("Required Heroes:")
         
-        req_count = len(reqs["Required_Heroes"])
+        req_count = len(heroes)
         PyImGui.indent(0.0)
         PyImGui.text_colored(
             f"These heroes will replace the first {req_count} slots of your party.",
             (0.6, 0.6, 1.0, 1.0)
         )
         
-        for idx, hero_req in enumerate(reqs["Required_Heroes"]):
+        for idx, hero_req in enumerate(heroes):
             PyImGui.separator()
             self._draw_hero_requirement(hero_req, idx, mission_name)
         
         PyImGui.dummy(0, 5)
         if PyImGui.button("Test Team Loadout (Load All Heroes)", -1, 0):
             self.bot.team_manager.test_routine = self.bot.team_manager.TestMandatoryHeroes(
-                reqs["Required_Heroes"], mission_name
+                heroes, mission_name
             )
         
         PyImGui.unindent(0.0)
     
+    def _get_required_heroes(self, reqs):
+        """Extract required heroes from requirements."""
+        if isinstance(reqs, dict):
+            return reqs.get("Required_Heroes")
+        if hasattr(reqs, 'required_heroes'):
+            return reqs.required_heroes
+        return None
+    
     def _draw_hero_requirement(self, hero_req, slot_index, mission_name):
         """Draw a single hero requirement."""
-        h_id_req = hero_req.get("HeroID", 0)
-        h_build = hero_req.get("Build", "")
-        h_eq = hero_req.get("Equipment", "")
-        h_wep = hero_req.get("Weapons", "")
+        # Handle both dict and dataclass formats
+        h_id_req = self._get_hero_id(hero_req)
+        h_build = self._get_hero_build(hero_req)
+        h_eq = self._get_hero_equipment(hero_req)
+        h_wep = self._get_hero_weapons(hero_req)
         
         if h_id_req > 0:
             # Fixed hero requirement
-            h_name = HeroID.get_nice_name(h_id_req)
+            h_name = self._get_hero_nice_name(h_id_req)
             PyImGui.text_colored(f"Slot {slot_index+1}: {h_name}", Colors.HEADER)
             PyImGui.same_line(0.0, -1.0)
             PyImGui.text_colored("(Mandatory)", Colors.WARN_COLOR)
         else:
             # Flexible hero requirement
-            role_name = hero_req.get("Role", f"Strategy Slot {slot_index+1}")
+            role_name = self._get_hero_role(hero_req) or f"Strategy Slot {slot_index+1}"
             PyImGui.text_colored(f"Slot {slot_index+1}: {role_name}", Colors.HEADER)
             
             # Hero selector dropdown
@@ -215,6 +261,45 @@ class NotificationWindow:
         if h_build:
             self._draw_clickable_build(h_build, "Build")
         PyImGui.unindent(0.0)
+    
+    def _get_hero_id(self, hero_req) -> int:
+        """Extract hero_id from dict or dataclass."""
+        if isinstance(hero_req, dict):
+            return hero_req.get("HeroID", 0)
+        return getattr(hero_req, 'hero_id', 0)
+    
+    def _get_hero_build(self, hero_req) -> str:
+        """Extract build from dict or dataclass."""
+        if isinstance(hero_req, dict):
+            return hero_req.get("Build", "")
+        return getattr(hero_req, 'build', "")
+    
+    def _get_hero_equipment(self, hero_req) -> str:
+        """Extract equipment from dict or dataclass."""
+        if isinstance(hero_req, dict):
+            return hero_req.get("Equipment", "")
+        return getattr(hero_req, 'equipment', "")
+    
+    def _get_hero_weapons(self, hero_req) -> str:
+        """Extract weapons from dict or dataclass."""
+        if isinstance(hero_req, dict):
+            return hero_req.get("Weapons", "")
+        return getattr(hero_req, 'weapons', "")
+    
+    def _get_hero_role(self, hero_req) -> str:
+        """Extract role from dict or dataclass."""
+        if isinstance(hero_req, dict):
+            return hero_req.get("Role", "")
+        return getattr(hero_req, 'role', "")
+    
+    def _get_hero_nice_name(self, hero_id: int) -> str:
+        """Get display name for a hero ID."""
+        if hero_id == 0:
+            return "None"
+        try:
+            return self.bot.team_manager.config.get_hero_nice_name(hero_id)
+        except:
+            return HeroType(hero_id).name if hero_id > 0 else "Unknown"
     
     def _draw_hero_selector(self, mission_name, slot_index):
         """Draw hero selection dropdown for flexible slots."""
@@ -236,12 +321,19 @@ class NotificationWindow:
     
     def _draw_notes(self, reqs):
         """Draw general notes section."""
-        if "Notes" not in reqs or not reqs["Notes"]:
+        notes = self._get_notes(reqs)
+        if not notes:
             return
         
         PyImGui.dummy(0, 5)
         PyImGui.text_colored("Notes:", Colors.HEADER)
-        PyImGui.text_wrapped(reqs["Notes"])
+        PyImGui.text_wrapped(notes)
+    
+    def _get_notes(self, reqs) -> str:
+        """Extract notes from requirements."""
+        if isinstance(reqs, dict):
+            return reqs.get("Notes", "")
+        return getattr(reqs, 'notes', "")
     
     def _draw_footer(self):
         """Draw the dismiss button."""

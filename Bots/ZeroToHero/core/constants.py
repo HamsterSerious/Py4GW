@@ -1,66 +1,46 @@
 """
-Core constants for the Zero To Hero bot.
-Centralizes all magic numbers, colors, and configuration values.
+Constants and configuration values for Zero To Hero bot.
 """
-from Py4GWCoreLib.py4gwcorelib_src.Color import Color
 
-# ========================
-# BOT CONFIGURATION
-# ========================
+# Bot Identity
 BOT_NAME = "ZeroToHero"
-BOT_VERSION = "1.0"
-BOT_AUTHOR = "Paul"
+BOT_VERSION = "0.2.0"
+BOT_AUTHOR = "YourName"
 
-# ========================
-# UI CONFIGURATION
-# ========================
-WINDOW_SIZE = (400, 700)
+# Window Configuration
+WINDOW_SIZE = (400, 500)
 
-# ========================
-# THEME COLORS
-# ========================
-class Colors:
-    """UI color scheme - Guild Wars inspired"""
-    
-    # Backgrounds
-    WINDOW_BG = Color(28, 28, 28, 230).to_tuple_normalized()
-    FRAME_BG = Color(48, 48, 48, 230).to_tuple_normalized()
-    FRAME_HOVER = Color(68, 68, 68, 230).to_tuple_normalized()
-    FRAME_ACTIVE = Color(58, 58, 58, 230).to_tuple_normalized()
-    
-    # Text
-    BODY_TEXT = Color(139, 131, 99, 255).to_tuple_normalized()
-    HEADER = Color(136, 117, 44, 255).to_tuple_normalized()
-    ICON = Color(177, 152, 55, 255).to_tuple_normalized()
-    DISABLED_TEXT = Color(140, 140, 140, 255).to_tuple_normalized()
-    
-    # UI Elements
-    SEPARATOR = Color(90, 90, 90, 255).to_tuple_normalized()
-    BUTTON = Color(33, 51, 58, 255).to_tuple_normalized()
-    BUTTON_HOVER = Color(140, 140, 140, 255).to_tuple_normalized()
-    BUTTON_ACTIVE = Color(90, 90, 90, 255).to_tuple_normalized()
-    
-    # Status Indicators
-    HM_COLOR = (1.0, 0.3, 0.3, 1.0)      # Red - Hard Mode
-    NM_COLOR = (0.3, 1.0, 0.3, 1.0)      # Green - Normal Mode
-    WARN_COLOR = (1.0, 0.7, 0.0, 1.0)    # Orange - Warnings
-    ERROR_COLOR = (1.0, 0.0, 0.0, 1.0)   # Red - Errors
-    SUCCESS_COLOR = (0.0, 1.0, 0.0, 1.0) # Green - Success
-    INFO_COLOR = (0.0, 1.0, 1.0, 1.0)    # Cyan - Info
-
-# ========================
-# CAMPAIGN SORTING
-# ========================
+# Campaign display order (for UI sorting)
 CAMPAIGN_ORDER = [
-    "Prophecies",
-    "Factions", 
-    "Nightfall",
-    "Eye of the North",
-    "EyeOfTheNorth",
-    "Extra"
+    "prophecies",
+    "factions",
+    "nightfall",
+    "eye_of_the_north",
+    "extra"
 ]
 
-# ========================
-# TASK FILTERS
-# ========================
-TASK_FILTER_OPTIONS = ["All", "Mission", "Quest"]
+# Task filter options for UI dropdown
+TASK_FILTER_OPTIONS = ["All", "Mission", "Quest", "Task"]
+
+
+class Colors:
+    """Standard colors used throughout the UI."""
+    
+    # Text colors
+    HEADER = (0.4, 0.8, 1.0, 1.0)       # Light blue for headers
+    INFO_COLOR = (0.3, 0.7, 1.0, 1.0)   # Blue for info text
+    SUCCESS_COLOR = (0.3, 1.0, 0.3, 1.0) # Green for success
+    WARN_COLOR = (1.0, 0.8, 0.2, 1.0)   # Yellow for warnings
+    ERROR_COLOR = (1.0, 0.3, 0.3, 1.0)  # Red for errors
+    
+    # Mode indicators
+    HM_COLOR = (1.0, 0.5, 0.3, 1.0)     # Orange for Hard Mode
+    NM_COLOR = (0.5, 0.8, 0.5, 1.0)     # Light green for Normal Mode
+    
+    # UI elements
+    ICON = (0.5, 0.8, 1.0, 1.0)         # Icon tint color
+    DISABLED = (0.5, 0.5, 0.5, 1.0)     # Grayed out
+    
+    # Background colors (with alpha)
+    PANEL_BG = (0.15, 0.15, 0.15, 0.95)
+    HIGHLIGHT_BG = (0.3, 0.3, 0.4, 0.8)

@@ -1,16 +1,20 @@
+"""
+Team Manager UI - Handles all UI rendering for team management.
+
+Responsibilities:
+- Main team setup window
+- Profile editor tabs
+- Hero renaming interface
+- Hero selection dropdowns
+"""
 import PyImGui
-from data.enums import HeroID
+from Py4GWCoreLib.enums_src.Hero_enums import HeroType
 from utils.string_utils import sanitize_string
 
 
 class TeamManagerUI:
     """
     Handles all UI rendering for team management.
-    Responsibilities:
-    - Main team setup window
-    - Profile editor tabs
-    - Hero renaming interface
-    - Hero selection dropdowns
     """
     
     def __init__(self, config_manager, on_save_callback, on_test_load_callback):
@@ -26,7 +30,7 @@ class TeamManagerUI:
         
         # UI State
         self.show_window = False
-        self.selected_rename_hero_id = HeroID.Norgu.value
+        self.selected_rename_hero_id = HeroType.Norgu.value
         self.hero_options = []  # [(hero_id, display_name), ...]
         
         self.refresh_hero_list()
@@ -73,11 +77,11 @@ class TeamManagerUI:
         """
         self.hero_options = []
         
-        for hero in HeroID:
+        for hero in HeroType:
             if hero.value == 0:
                 continue
             
-            original_name = HeroID.get_nice_name(hero.value)
+            original_name = self.config.get_hero_nice_name(hero.value)
             custom_name = self.config.get_custom_hero_name(hero.value)
             
             if custom_name:
@@ -101,7 +105,9 @@ class TeamManagerUI:
         
         return f"Hero {hero_id}"
     
-    # --- Private: Tab Drawing ---
+    # ==================
+    # PRIVATE: TAB DRAWING
+    # ==================
     
     def _draw_party_size_tab(self, size):
         """Draws the content for a party size tab (4, 6, or 8)."""
@@ -198,18 +204,18 @@ class TeamManagerUI:
         PyImGui.separator()
         
         # Hero selector
-        current_display_name = HeroID.get_nice_name(self.selected_rename_hero_id)
+        current_display_name = self.config.get_hero_nice_name(self.selected_rename_hero_id)
         custom_name = self.config.get_custom_hero_name(self.selected_rename_hero_id)
         
         if custom_name:
             current_display_name = f"{custom_name} ({current_display_name})"
         
         if PyImGui.begin_combo("Select Hero", current_display_name, 0):
-            for hero in HeroID:
+            for hero in HeroType:
                 if hero.value == 0:
                     continue
                 
-                std_name = HeroID.get_nice_name(hero.value)
+                std_name = self.config.get_hero_nice_name(hero.value)
                 is_selected = (hero.value == self.selected_rename_hero_id)
                 
                 if PyImGui.selectable(std_name, is_selected, 0, (0, 0)):
@@ -233,7 +239,9 @@ class TeamManagerUI:
         PyImGui.separator()
         PyImGui.text_disabled("Note: Changes update the 'Setup Team' dropdowns after Saving.")
     
-    # --- Helper Methods ---
+    # ==================
+    # HELPER METHODS
+    # ==================
     
     def _get_hero_combo_label(self, hero_id):
         """Gets the label to display in a hero combo box."""

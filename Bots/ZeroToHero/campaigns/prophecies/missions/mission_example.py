@@ -1,95 +1,190 @@
+"""
+Example Mission - Template for creating new missions.
+
+Copy this file and modify for your own missions.
+"""
+from Py4GWCoreLib.enums_src.Hero_enums import HeroType
+
 from core.base_task import BaseTask
-from data.enums import HeroID
-import Py4GW
+from data.enums import TaskType, GameMode
+from models.task import TaskInfo
+from models.loadout import (
+    LoadoutConfig,
+    MandatoryLoadout,
+    PlayerBuildRequirement,
+    HeroRequirement
+)
+
 
 class Mission_Example(BaseTask):
-    def __init__(self):
-        super().__init__()
-        self.name = "Example Mission (Ascalon)"
-        self.description = "This is a tutorial mission to demonstrate the framework."
-        self.task_type = "Mission" 
-
-    def GetInfo(self):
-        """
-        Returns metadata about the mission.
-        """
-        return {
-            "Name": self.name,
-            "Type": self.task_type,
-            "Description": "An example mission where we fight our way through the Ascalon breach. Requires standard team setup.",
-            "Recommended_Builds": ["OACjE...", "OQGkA..."],
-            "HM_Tips": "Bring plenty of condition removal for the burning.",
+    """
+    Example mission demonstrating the new TaskInfo pattern.
+    
+    This serves as a template for creating new missions.
+    """
+    
+    # Task metadata - define at class level
+    INFO = TaskInfo(
+        name="Example Mission (Ascalon)",
+        description="This is an example mission template showing how to define "
+                    "task metadata using the new dataclass pattern.",
+        task_type=TaskType.MISSION,
+        start_map_id=148,  # Example: Ascalon City
+        
+        # Optional: recommended builds for general use
+        recommended_builds=["Warrior", "Elementalist", "Any caster"],
+        
+        # Optional: hard mode tips
+        hm_tips="In Hard Mode, enemies hit harder and have more health. "
+                "Consider bringing additional healing.",
+        
+        # Optional: mandatory loadout requirements
+        loadout=LoadoutConfig(
+            # Normal mode requirements (or None if no special requirements)
+            normal_mode=None,
             
-            # --- NEW MANDATORY LOADOUT SECTION ---
-            "Mandatory_Loadout": {
-                # Normal Mode Requirements
-                "NM": {
-                     # Example: No specific requirements for NM
-                },
+            # Hard mode requirements
+            hard_mode=MandatoryLoadout(
+                # Player build requirements
+                player_build=PlayerBuildRequirement(
+                    # Build codes by profession (use "Any" key for universal builds)
+                    builds={
+                        "Warrior": "OQcAQ8hTIxsDAAAAAAAAAA",  # Example build code
+                        "Any": "OAhAAAAAAAAAAAAAAAAAAA"       # Fallback for other professions
+                    },
+                    expected_skills=8,
+                    equipment="Sentinel's Insignia recommended",
+                    weapons={
+                        "Set 1": "Sword/Shield with +armor",
+                        "Set 2": "Longbow for pulling"
+                    }
+                ),
                 
-                # Hard Mode Requirements
-                "HM": {
-                    # Optional: Verify that the player loaded at least X skills
-                    "Expected_Skills": 8, 
-
-                    # Dictionary keyed by Primary Profession
-                    "Player_Build": {
-                        "Warrior": "OQASE5ybM+s8146lE8146lE81",
-                        "Mesmer": "OQBDAqwDSzZzJzJzJzJzJzJzJ",
-                        "Any": "OACjEjiM5MXT20658m4e5u172A" # Fallback for other classes
-                    },
+                # Required heroes
+                required_heroes=[
+                    # Fixed hero requirement (specific hero required)
+                    HeroRequirement(
+                        hero_id=HeroType.Koss.value,
+                        build="OQcAQ8hTIxsDAAAAAAAAAA",
+                        expected_skills=8,
+                        equipment="Survivor Insignia",
+                        weapons="Hammer"
+                    ),
                     
-                    # New Equipment Section (Runes/Insignias)
-                    "Equipment": {
-                        "Runes": "Superior Vigor, +1+3 Fire Magic",
-                        "Insignias": "Survivor Insignias on all armor pieces"
-                    },
-
-                    # New Weapons Section
-                    "Weapons": {
-                        "Set 1": "40/40 Fire Staff (HCT 20% / HSR 20%)",
-                        "Set 2": "Longbow + Shield (for pulling)"
-                    },
-
-                    "Required_Heroes": [
-                        # 1. FIXED Requirement (Game requires Koss)
-                        { 
-                            "HeroID": HeroID.Koss.value, 
-                            "Build": "OQcUERKXzvMXFeSfh8N14K8VcHA",
-                            "Expected_Skills": 8
-                        },
-                        # 2. STRATEGY Requirement (Bot needs a Healer/Prot)
-                        { 
-                            "HeroID": 0, # 0 = Generic/Flexible Slot
-                            "Role": "Necro",
-                            "Build": "OAdTUYD6VSBcXcBKm8LAAAAAAA",
-                            "Expected_Skills": 5,
-                            "Equipment": "Radiant Insignias, +1+3 Divine Favor",
-                            "Weapons": "40/40 Divine Set"
-                        }
-                    ],
-                    "Notes": "Do NOT bring Minion Masters, as they steal aggro in the final room."
-                }
-            }
-        }
-
-    def Execution_Routine(self, bot):
-        # 1. Travel
-        yield from bot.transition.TravelTo(map_id=123) 
+                    # Flexible hero requirement (user picks hero matching role)
+                    HeroRequirement(
+                        hero_id=0,  # 0 = flexible, user selects
+                        role="Healer",
+                        build="OAhAAAAAAAAAAAAAAAAAAA",
+                        expected_skills=8
+                    ),
+                    
+                    # Another flexible slot
+                    HeroRequirement(
+                        hero_id=0,
+                        role="Protection Monk",
+                        build="OAhAAAAAAAAAAAAAAAAAAA"
+                    )
+                ],
+                
+                # General notes for the player
+                notes="Do NOT bring Minion Masters - corpses are needed for quest objectives."
+            )
+        )
+    )
+    
+    # Mission-specific data
+    WAYPOINTS = [
+        (1000, 2000),
+        (1500, 2500),
+        (2000, 3000)
+    ]
+    
+    MISSION_NPC_ID = 12345  # Example NPC ID
+    
+    def PreRunCheck(self, bot) -> tuple:
+        """
+        Verify preconditions before starting the mission.
+        """
+        # Example: Check if player has required quest
+        # if not has_quest(self.INFO.requires_quest_id):
+        #     return (False, "Required quest not active")
         
-        # 2. Setup Team (Handles HM/NM automatically)
-        yield from bot.transition.SetupMission(bot, use_hard_mode=self.use_hard_mode)
+        return (True, "")
+    
+    def execute(self, bot):
+        """
+        Main mission execution logic.
         
-        # 3. Enter Mission
-        yield from bot.transition.MoveToAndInteract(bot, npc_id=456)
+        Args:
+            bot: The bot instance with access to all systems
+        """
+        # 1. Travel to mission outpost
+        yield from bot.transition.TravelTo(self.INFO.start_map_id)
         
-        # 4. Logic Loop
-        while not bot.movement.IsMapReady():
-            yield from bot.movement.Wait(100)
+        # 2. Setup team and enter mission
+        yield from bot.transition.SetupMission(bot, self.use_hard_mode)
+        
+        # 3. Talk to NPC to enter mission (if applicable)
+        # yield from bot.transition.MoveToAndInteract(bot, self.MISSION_NPC_ID)
+        # yield from bot.transition.EnterMission(bot)
+        
+        # 4. Execute mission waypoints
+        for x, y in self.WAYPOINTS:
+            yield from bot.movement.MoveTo(x, y)
             
-        Py4GW.Console.Log(bot.bot_name, "Mission Started!", Py4GW.Console.MessageType.Info)
+            # Optional: Combat handling
+            # if bot.combat.InCombat():
+            #     yield from bot.combat.Fight()
         
-        # ... Mission Logic ...
-        yield from bot.movement.Wait(1000)
-        
+        # 5. Mark as complete
+        self.finished = True
+
+
+# ==================
+# MINIMAL EXAMPLE
+# ==================
+
+class Mission_Minimal(BaseTask):
+    """
+    Minimal mission example - just the essentials.
+    """
+    
+    INFO = TaskInfo(
+        name="Minimal Example",
+        description="A bare-bones mission template.",
+        task_type=TaskType.MISSION,
+        start_map_id=148
+    )
+    
+    def execute(self, bot):
+        yield from bot.transition.TravelTo(self.INFO.start_map_id)
+        yield from bot.transition.SetupMission(bot, self.use_hard_mode)
+        # ... mission logic here
+        self.finished = True
+
+
+# ==================
+# QUEST EXAMPLE
+# ==================
+
+class Quest_Example(BaseTask):
+    """
+    Example quest - quests don't have HM/NM modes.
+    """
+    
+    INFO = TaskInfo(
+        name="Example Quest",
+        description="Template for creating quests.",
+        task_type=TaskType.QUEST,
+        start_map_id=148,
+        requires_quest_id=100  # Quest ID that must be active
+    )
+    
+    QUEST_GIVER_ID = 54321
+    
+    def execute(self, bot):
+        yield from bot.transition.TravelTo(self.INFO.start_map_id)
+        yield from bot.movement.MoveTo(1000, 2000)
+        # ... quest logic
         self.finished = True

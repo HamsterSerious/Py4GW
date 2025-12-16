@@ -8,6 +8,7 @@ from Py4GWCoreLib import ActionQueueManager
 
 from core.constants import BOT_NAME, CAMPAIGN_ORDER, TASK_FILTER_OPTIONS
 from core.task_registry import TaskRegistry
+from data.enums import TaskType, GameMode
 from systems.team_management.manager import TeamManager  
 from systems.movement import Movement
 from systems.combat import Combat
@@ -167,9 +168,11 @@ class ZeroToHeroBot(BottingClass):
         filtered_list = []
         for task_name in all_tasks:
             try:
-                task_class = self.task_registry.available_tasks[self.current_campaign][task_name]
-                if task_class().task_type == filter_type:
-                    filtered_list.append(task_name)
+                info = self.task_registry.get_task_info(self.current_campaign, task_name)
+                if info:
+                    # Compare enum value with filter string
+                    if info.task_type.value == filter_type:
+                        filtered_list.append(task_name)
             except:
                 continue
         
@@ -250,8 +253,8 @@ class ZeroToHeroBot(BottingClass):
         self.current_task_name = task.name
         
         # Log start
-        if task.task_type == "Mission":
-            mode_str = "HM" if task.use_hard_mode else "NM"
+        if task.task_type == TaskType.MISSION:
+            mode_str = task.mode_string
             Py4GW.Console.Log(
                 BOT_NAME, 
                 f"Starting Mission: {task.name} [{mode_str}]", 
@@ -275,18 +278,57 @@ class ZeroToHeroBot(BottingClass):
             self.current_task_instance = None
             return
         
-        # Start execution
-        self.config.FSM.AddManagedCoroutine("MainTask", task.Execution_Routine(self))
+        # Start execution - support both new execute() and legacy Execution_Routine()
+        if hasattr(task, 'execute'):
+            self.config.FSM.AddManagedCoroutine("MainTask", task.execute(self))
+        else:
+            self.config.FSM.AddManagedCoroutine("MainTask", task.Execution_Routine(self))
     
     def _check_mandatory_requirements(self):
         """Check if the added task has mandatory requirements and queue notification."""
         try:
-            task_class = self.task_registry.available_tasks[self.current_campaign][self.selected_task_name]
-            temp_inst = task_class()
-            info = temp_inst.GetInfo()
+            task_class = self.task_registry.get_task_class(
+                self.current_campaign, 
+                self.selected_task_name
+            )
+            if not task_class:
+                return
             
-            mandatory = info.get("Mandatory_Loadout", {})
-            req_mode_key = "HM" if self.use_hard_mode and temp_inst.task_type == "Mission" else "NM"
+            # Get task info
+            info = self.task_registry.get_task_info(
+                self.current_campaign,
+                self.selected_task_name
+            )
+            
+            if not info:
+                return
+            
+            # Determine which mode to check
+            game_mode = GameMode.from_bool(self.use_hard_mode) if info.task_type == TaskType.MISSION else GameMode.NORMAL
+            req_mode_key = game_mode.value
+            
+            # Check for requirements using new dataclass format
+            if info.loadout:
+                loadout = info.loadout.get_for_mode(game_mode)
+                if loadout and loadout.has_requirements():
+                    # Check if already pending
+                    already_pending = any(
+                        item['name'] == self.selected_task_name and item['mode'] == req_mode_key
+                        for item in self.pending_notifications
+                    )
+                    
+                    if not already_pending:
+                        self.pending_notifications.append({
+                            'name': self.selected_task_name,
+                            'mode': req_mode_key,
+                            'requirements': loadout  # Pass the dataclass directly
+                        })
+                return
+            
+            # Fall back to legacy dict format
+            temp_inst = task_class()
+            legacy_info = temp_inst.GetInfo()
+            mandatory = legacy_info.get("Mandatory_Loadout", {})
             
             if req_mode_key in mandatory:
                 reqs = mandatory[req_mode_key]
@@ -300,7 +342,6 @@ class ZeroToHeroBot(BottingClass):
                 )
                 
                 if has_real_reqs:
-                    # Check if already pending
                     already_pending = any(
                         item['name'] == self.selected_task_name and item['mode'] == req_mode_key
                         for item in self.pending_notifications
@@ -312,6 +353,7 @@ class ZeroToHeroBot(BottingClass):
                             'mode': req_mode_key,
                             'requirements': reqs
                         })
+                        
         except Exception as e:
             Py4GW.Console.Log(
                 BOT_NAME, 

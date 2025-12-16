@@ -1,84 +1,208 @@
-from Py4GWCoreLib import *
+"""
+Base Task - Abstract base class for all missions, quests, and tasks.
+
+Provides:
+- Task metadata via INFO class attribute
+- Execution lifecycle (started, finished, failed)
+- Pre-run checks
+- Backward compatibility with legacy GetInfo() method
+"""
+from data.enums import TaskType, GameMode
+from models.task import TaskInfo
+
 
 class BaseTask:
     """
-    The parent class for all Missions, Quests, and Tasks.
-    Every executable piece of content must inherit from this.
+    Base class for all executable tasks (missions, quests, etc).
+    
+    Subclasses should:
+    1. Override INFO with a TaskInfo instance
+    2. Implement execute(bot) generator method
+    3. Optionally override PreRunCheck(bot)
+    
+    Example:
+        class MyMission(BaseTask):
+            INFO = TaskInfo(
+                name="My Mission",
+                description="Does something cool",
+                task_type=TaskType.MISSION,
+                start_map_id=123
+            )
+            
+            def execute(self, bot):
+                yield from bot.transition.TravelTo(123)
+                # ... mission logic
+                self.finished = True
     """
+    
+    # Class-level task info - override in subclasses
+    INFO: TaskInfo = TaskInfo(
+        name="Unnamed Task",
+        description="No description provided.",
+        task_type=TaskType.TASK
+    )
+    
     def __init__(self):
-        # --- Metadata ---
-        self.name = "Unnamed Task"
-        self.description = "No description provided."
-        self.task_type = "Task" # Can be "Mission", "Quest", or "Task"
-        self.recommended_builds = []
-        self.hm_tips = ""
-        
-        # --- Mandatory Loadout Configuration ---
-        # Subclasses should populate this dictionary if specific requirements exist.
-        # Structure matches the JSON format used in Mission_Example.py
-        self.mandatory_loadout = {} 
-        
-        # --- Requirements (Auto-Checked) ---
-        self.start_map_id = 0  # 0 = No specific map required
-        self.requires_quest_id = 0 # 0 = No specific quest required
-        
-        # --- State Tracking ---
+        # Execution state
         self.started = False
         self.finished = False
         self.failed = False
         
-        # --- Mode Settings (Set by TaskManager when task is loaded) ---
-        self.use_hard_mode = False  # Only applies to Missions
-
-    def GetInfo(self):
+        # Mode configuration (set by QueuedTask.create_instance)
+        self.use_hard_mode = False
+    
+    # ==================
+    # PROPERTIES
+    # ==================
+    
+    @property
+    def name(self) -> str:
+        """Task display name."""
+        return self.INFO.name
+    
+    @property
+    def task_type(self) -> TaskType:
+        """Task type enum."""
+        return self.INFO.task_type
+    
+    @property
+    def game_mode(self) -> GameMode:
+        """Current game mode based on use_hard_mode flag."""
+        return GameMode.from_bool(self.use_hard_mode)
+    
+    @property
+    def mode_string(self) -> str:
+        """Mode as string ('NM' or 'HM')."""
+        return self.game_mode.value
+    
+    # ==================
+    # CLASS METHODS
+    # ==================
+    
+    @classmethod
+    def get_info(cls) -> TaskInfo:
         """
-        Returns the metadata used by the Dashboard UI and TaskManager.
+        Returns the TaskInfo for this task class.
+        Preferred method for accessing task metadata.
         """
-        return {
-            "Name": self.name,
-            "Description": self.description,
-            "Type": self.task_type,
-            "Recommended_Builds": self.recommended_builds,
-            "HM_Tips": self.hm_tips,
-            "Mandatory_Loadout": self.mandatory_loadout
-        }
-
-    def PreRunCheck(self, bot):
+        return cls.INFO
+    
+    # ==================
+    # INSTANCE METHODS
+    # ==================
+    
+    def PreRunCheck(self, bot) -> tuple:
         """
-        Logic to run BEFORE the task starts.
-        automatically checks Map ID if self.start_map_id is set.
+        Called before task execution starts.
+        Override to add custom pre-run validation.
+        
+        Args:
+            bot: The bot instance
+            
+        Returns:
+            (ready: bool, reason: str) - If not ready, reason explains why
         """
-        # 1. Check Map
-        if self.start_map_id != 0:
-            current_map = Map.GetMapID()
-            if current_map != self.start_map_id:
-                # We are in the wrong place. 
-                # Ideally, we return False and a reason so the bot can try to travel there.
-                return False, f"Wrong Map. Current: {current_map}, Needed: {self.start_map_id}"
-
-        # 2. Check Quest (Placeholder - assumes Quest Log handling exists in CoreLib)
-        # if self.requires_quest_id != 0:
-        #     if not Quest.IsActive(self.requires_quest_id):
-        #         return False, "Required quest not active."
-
-        return True, "Ready"
-
+        return (True, "")
+    
+    def execute(self, bot):
+        """
+        Main execution generator. Override in subclasses.
+        
+        Args:
+            bot: The bot instance with access to all systems
+            
+        Yields:
+            Control back to the bot loop
+            
+        Example:
+            def execute(self, bot):
+                yield from bot.transition.TravelTo(self.INFO.start_map_id)
+                yield from bot.movement.MoveTo(1000, 2000)
+                self.finished = True
+        """
+        # Default implementation - override in subclasses
+        self.finished = True
+        yield
+    
     def Execution_Routine(self, bot):
         """
-        The CORE LOGIC generator.
-        Override this in your Mission/Quest files.
+        Legacy method name - calls execute() for backward compatibility.
+        New code should use execute() instead.
         """
-        if False:
-            yield 
+        yield from self.execute(bot)
+    
+    # ==================
+    # LEGACY COMPATIBILITY
+    # ==================
+    
+    def GetInfo(self) -> dict:
+        """
+        Legacy method - returns task info as dictionary.
         
-        Py4GW.Console.Log(self.name, "Execution_Routine not implemented!", Py4GW.Console.MessageType.Error)
-        return
-
-    def Reset(self):
+        New code should use get_info() classmethod instead.
+        This method exists for backward compatibility with existing
+        code that expects the dictionary format.
+        
+        Returns:
+            Dict with task metadata in legacy format
         """
-        Resets the task state.
-        """
-        self.started = False
-        self.finished = False
-        self.failed = False
-        self.use_hard_mode = False
+        info = self.INFO
+        
+        result = {
+            "Name": info.name,
+            "Description": info.description,
+            "Type": info.task_type.value if isinstance(info.task_type, TaskType) else str(info.task_type),
+            "Recommended_Builds": info.recommended_builds or ["Any"],
+            "HM_Tips": info.hm_tips or ""
+        }
+        
+        # Convert loadout to legacy format if present
+        if info.loadout:
+            result["Mandatory_Loadout"] = self._loadout_to_dict(info.loadout)
+        
+        return result
+    
+    def _loadout_to_dict(self, loadout) -> dict:
+        """Convert LoadoutConfig to legacy dict format."""
+        result = {}
+        
+        if loadout.normal_mode:
+            result["NM"] = self._mandatory_loadout_to_dict(loadout.normal_mode)
+        
+        if loadout.hard_mode:
+            result["HM"] = self._mandatory_loadout_to_dict(loadout.hard_mode)
+        
+        return result
+    
+    def _mandatory_loadout_to_dict(self, ml) -> dict:
+        """Convert MandatoryLoadout to legacy dict format."""
+        result = {}
+        
+        if ml.player_build:
+            pb = ml.player_build
+            if pb.builds:
+                result["Player_Build"] = pb.builds
+            if pb.expected_skills != 8:
+                result["Expected_Skills"] = pb.expected_skills
+            if pb.equipment:
+                result["Equipment"] = pb.equipment
+            if pb.weapons:
+                result["Weapons"] = pb.weapons
+        
+        if ml.required_heroes:
+            result["Required_Heroes"] = [
+                {
+                    "HeroID": h.hero_id,
+                    "Role": h.role,
+                    "Build": h.build,
+                    "Expected_Skills": h.expected_skills,
+                    "Equipment": h.equipment,
+                    "Weapons": h.weapons
+                }
+                for h in ml.required_heroes
+            ]
+        
+        if ml.notes:
+            result["Notes"] = ml.notes
+        
+        return result

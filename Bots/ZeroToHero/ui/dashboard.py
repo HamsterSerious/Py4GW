@@ -8,6 +8,7 @@ from Py4GWCoreLib.ImGui_src.IconsFontAwesome5 import IconsFontAwesome5
 from Py4GWCoreLib.GlobalCache import GLOBAL_CACHE
 
 from core.constants import BOT_NAME, WINDOW_SIZE, BOT_VERSION, BOT_AUTHOR, Colors, TASK_FILTER_OPTIONS
+from data.enums import TaskType, GameMode
 from ui.themes import Theme
 
 
@@ -173,13 +174,14 @@ class DashboardUI:
     def _get_info_button_label(self):
         """Get appropriate label for info button based on task type."""
         try:
-            if (self.bot.current_campaign in self.bot.task_registry.available_tasks and 
-                self.bot.selected_task_name in self.bot.task_registry.available_tasks[self.bot.current_campaign]):
-                task_cls = self.bot.task_registry.available_tasks[self.bot.current_campaign][self.bot.selected_task_name]
-                temp_inst = task_cls()
-                if temp_inst.task_type == "Mission":
+            info = self.bot.task_registry.get_task_info(
+                self.bot.current_campaign,
+                self.bot.selected_task_name
+            )
+            if info:
+                if info.task_type == TaskType.MISSION:
                     return "Mission Info"
-                elif temp_inst.task_type == "Quest":
+                elif info.task_type == TaskType.QUEST:
                     return "Quest Info"
         except:
             pass
@@ -256,15 +258,17 @@ class DashboardUI:
             PyImGui.text(self.bot.current_task_name)
             
             # Mode indicator for current task
-            if self.bot.current_task_instance and self.bot.current_task_instance.task_type == "Mission":
-                PyImGui.same_line(0.0, 10.0)
-                if self.bot.current_task_instance.use_hard_mode:
-                    PyImGui.text_colored("[HM]", Colors.HM_COLOR)
-                else:
-                    PyImGui.text_colored("[NM]", Colors.NM_COLOR)
+            if self.bot.current_task_instance:
+                task_type = self.bot.current_task_instance.task_type
+                if task_type == TaskType.MISSION:
+                    PyImGui.same_line(0.0, 10.0)
+                    if self.bot.current_task_instance.use_hard_mode:
+                        PyImGui.text_colored("[HM]", Colors.HM_COLOR)
+                    else:
+                        PyImGui.text_colored("[NM]", Colors.NM_COLOR)
             
             # Queue length
-            q_len = len(self.bot.task_registry.task_queue)
+            q_len = self.bot.task_registry.get_queue_length()
             PyImGui.text_colored(f"Tasks in Queue: {q_len}", (0.5, 0.5, 0.5, 1.0))
         
         PyImGui.end_child()

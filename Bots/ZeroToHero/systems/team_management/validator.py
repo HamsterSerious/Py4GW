@@ -1,3 +1,12 @@
+"""
+Build Validator - Handles testing and verification of builds.
+
+Responsibilities:
+- Testing player loadouts
+- Testing hero builds
+- Verifying skill counts
+- Managing test sequences
+"""
 import time
 import Py4GW
 from Py4GWCoreLib import Routines
@@ -7,11 +16,6 @@ from Py4GWCoreLib.GlobalCache import GLOBAL_CACHE
 class BuildValidator:
     """
     Handles testing and verification of builds.
-    Responsibilities:
-    - Testing player loadouts
-    - Testing hero builds
-    - Verifying skill counts
-    - Managing test sequences
     """
     
     def __init__(self, team_composer):
@@ -31,10 +35,18 @@ class BuildValidator:
         
         Yields for coroutine execution.
         """
-        Py4GW.Console.Log("BuildValidator", "Testing Player Loadout...", Py4GW.Console.MessageType.Info)
+        Py4GW.Console.Log(
+            "BuildValidator", 
+            "Testing Player Loadout...", 
+            Py4GW.Console.MessageType.Info
+        )
         
         if not build_code or build_code == "Any":
-            Py4GW.Console.Log("BuildValidator", "No build code provided.", Py4GW.Console.MessageType.Warning)
+            Py4GW.Console.Log(
+                "BuildValidator", 
+                "No build code provided.", 
+                Py4GW.Console.MessageType.Warning
+            )
             return
         
         # Load the build
@@ -47,16 +59,24 @@ class BuildValidator:
             equipped_count = len([s for s in skill_ids if s != 0])
             
             if equipped_count >= expected_skills:
-                Py4GW.Console.Log("BuildValidator", 
-                                f"Success! Equipped {equipped_count}/{expected_skills} skills.", 
-                                Py4GW.Console.MessageType.Success)
+                Py4GW.Console.Log(
+                    "BuildValidator", 
+                    f"Success! Equipped {equipped_count}/{expected_skills} skills.", 
+                    Py4GW.Console.MessageType.Success
+                )
             else:
-                Py4GW.Console.Log("BuildValidator", 
-                                f"Warning: Only {equipped_count} skills loaded. Expected {expected_skills}. "
-                                "Click the build code in the info window to copy and verify.", 
-                                Py4GW.Console.MessageType.Warning)
+                Py4GW.Console.Log(
+                    "BuildValidator", 
+                    f"Warning: Only {equipped_count} skills loaded. Expected {expected_skills}. "
+                    "Click the build code in the info window to copy and verify.", 
+                    Py4GW.Console.MessageType.Warning
+                )
         except Exception as e:
-            Py4GW.Console.Log("BuildValidator", f"Verification failed: {e}", Py4GW.Console.MessageType.Error)
+            Py4GW.Console.Log(
+                "BuildValidator", 
+                f"Verification failed: {e}", 
+                Py4GW.Console.MessageType.Error
+            )
     
     def test_mandatory_heroes(self, hero_requirements, mission_name, get_assigned_hero_fn, get_hero_name_fn):
         """
@@ -70,7 +90,11 @@ class BuildValidator:
         
         Yields for coroutine execution.
         """
-        Py4GW.Console.Log("BuildValidator", "Starting Mandatory Hero Test...", Py4GW.Console.MessageType.Info)
+        Py4GW.Console.Log(
+            "BuildValidator", 
+            "Starting Mandatory Hero Test...", 
+            Py4GW.Console.MessageType.Info
+        )
         
         # Disband existing party
         if GLOBAL_CACHE.Party.GetHeroCount() > 0:
@@ -82,19 +106,26 @@ class BuildValidator:
         
         # Add each hero
         for idx, req in enumerate(hero_requirements):
-            hero_id = req.get("HeroID", 0)
+            # Handle both dict and dataclass formats
+            hero_id = self._get_hero_id(req)
             
             # Resolve flexible heroes
             if hero_id == 0:
                 hero_id = get_assigned_hero_fn(mission_name, idx)
                 if hero_id == 0:
-                    Py4GW.Console.Log("BuildValidator", 
-                                    f"Skipping Slot {idx+1}: No hero selected.", 
-                                    Py4GW.Console.MessageType.Warning)
+                    Py4GW.Console.Log(
+                        "BuildValidator", 
+                        f"Skipping Slot {idx+1}: No hero selected.", 
+                        Py4GW.Console.MessageType.Warning
+                    )
                     continue
             
             hero_name = get_hero_name_fn(hero_id)
-            Py4GW.Console.Log("BuildValidator", f"Adding {hero_name} (Slot {idx+1})...", Py4GW.Console.MessageType.Info)
+            Py4GW.Console.Log(
+                "BuildValidator", 
+                f"Adding {hero_name} (Slot {idx+1})...", 
+                Py4GW.Console.MessageType.Info
+            )
             
             # Add hero
             GLOBAL_CACHE.Party.Heroes.AddHero(hero_id)
@@ -102,12 +133,16 @@ class BuildValidator:
             # Wait for hero to appear in party
             party_slot = yield from self._wait_for_hero(hero_id, timeout=3.0)
             if party_slot == -1:
-                Py4GW.Console.Log("BuildValidator", f"Failed to add {hero_name}.", Py4GW.Console.MessageType.Error)
+                Py4GW.Console.Log(
+                    "BuildValidator", 
+                    f"Failed to add {hero_name}.", 
+                    Py4GW.Console.MessageType.Error
+                )
                 continue
             
             # Load and verify build
-            build_code = req.get("Build", "")
-            expected_skills = req.get("Expected_Skills", 8)
+            build_code = self._get_build(req)
+            expected_skills = self._get_expected_skills(req)
             
             if build_code and build_code != "Any":
                 yield from self._load_and_verify_hero_build(
@@ -117,11 +152,19 @@ class BuildValidator:
                     hero_name
                 )
             else:
-                Py4GW.Console.Log("BuildValidator", f"{hero_name} ready (Any build).", Py4GW.Console.MessageType.Success)
+                Py4GW.Console.Log(
+                    "BuildValidator", 
+                    f"{hero_name} ready (Any build).", 
+                    Py4GW.Console.MessageType.Success
+                )
             
             yield from Routines.Yield.wait(300)
         
-        Py4GW.Console.Log("BuildValidator", "Mandatory Hero Check Complete.", Py4GW.Console.MessageType.Info)
+        Py4GW.Console.Log(
+            "BuildValidator", 
+            "Mandatory Hero Check Complete.", 
+            Py4GW.Console.MessageType.Info
+        )
     
     def verify_hero_build(self, party_slot, expected_count=8):
         """
@@ -143,10 +186,34 @@ class BuildValidator:
                 # Method not available, assume success
                 return (True, expected_count)
         except Exception as e:
-            Py4GW.Console.Log("BuildValidator", f"Verification error: {e}", Py4GW.Console.MessageType.Error)
+            Py4GW.Console.Log(
+                "BuildValidator", 
+                f"Verification error: {e}", 
+                Py4GW.Console.MessageType.Error
+            )
             return (False, 0)
     
-    # --- Private Helpers ---
+    # ==================
+    # PRIVATE HELPERS
+    # ==================
+    
+    def _get_hero_id(self, req) -> int:
+        """Extract hero_id from dict or dataclass."""
+        if isinstance(req, dict):
+            return req.get("HeroID", 0)
+        return getattr(req, 'hero_id', 0)
+    
+    def _get_build(self, req) -> str:
+        """Extract build from dict or dataclass."""
+        if isinstance(req, dict):
+            return req.get("Build", "")
+        return getattr(req, 'build', "")
+    
+    def _get_expected_skills(self, req) -> int:
+        """Extract expected_skills from dict or dataclass."""
+        if isinstance(req, dict):
+            return req.get("Expected_Skills", 8)
+        return getattr(req, 'expected_skills', 8)
     
     def _wait_for_hero(self, hero_id, timeout=3.0):
         """
@@ -182,25 +249,23 @@ class BuildValidator:
         success, loaded_count = self.verify_hero_build(party_slot, expected_skills)
         
         if success:
-            Py4GW.Console.Log("BuildValidator", 
-                            f"{hero_name}: Success ({loaded_count}/{expected_skills} skills).", 
-                            Py4GW.Console.MessageType.Success)
+            Py4GW.Console.Log(
+                "BuildValidator", 
+                f"{hero_name}: Success ({loaded_count}/{expected_skills} skills).", 
+                Py4GW.Console.MessageType.Success
+            )
         else:
-            Py4GW.Console.Log("BuildValidator", 
-                            f"{hero_name}: Warning! Only loaded {loaded_count}/{expected_skills} skills. "
-                            "Click the build code in the info window to copy and verify.", 
-                            Py4GW.Console.MessageType.Warning)
+            Py4GW.Console.Log(
+                "BuildValidator", 
+                f"{hero_name}: Warning! Only loaded {loaded_count}/{expected_skills} skills. "
+                "Click the build code in the info window to copy and verify.", 
+                Py4GW.Console.MessageType.Warning
+            )
     
     def _count_loaded_skills(self, hero_data):
         """
         Counts how many skills are loaded on a hero.
         Handles multiple data formats returned by GetHeroSkillbar.
-        
-        Args:
-            hero_data: Data returned from GetHeroSkillbar
-        
-        Returns:
-            Number of non-zero skills
         """
         loaded_count = 0
         
@@ -228,12 +293,6 @@ class BuildValidator:
     def _extract_skill_id(self, item):
         """
         Extracts a skill ID from various data formats.
-        
-        Args:
-            item: Could be int, or object with .id.id, or object with .id
-        
-        Returns:
-            Skill ID as int
         """
         if isinstance(item, int):
             return item
