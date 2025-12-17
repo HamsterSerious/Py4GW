@@ -6,6 +6,7 @@ Provides:
 - Execution lifecycle (started, finished, failed)
 - Pre-run checks
 - Mission Progress Tracking
+- Background monitor management
 """
 from typing import Generator, Tuple, List
 import Py4GW
@@ -30,10 +31,19 @@ class BaseTask:
             INFO = TaskInfo(...)
             
             def execute(self, bot):
+                # Setup objectives
                 obj = self.add_objective("Go to X")
-                yield from bot.movement.move_to(X)
-                self.complete_objective("Go to X")
-                self.finished = True
+                
+                # Register background monitor (auto-cleaned up)
+                self.register_monitor(bot, "BonusMonitor", self._monitor_bonus())
+                
+                try:
+                    # Mission logic
+                    yield from bot.movement.move_to(X)
+                    self.complete_objective("Go to X")
+                finally:
+                    # Monitors are auto-cleaned, but other cleanup goes here
+                    self.finished = True
     """
     
     # Class-level task info - override in subclasses
@@ -55,6 +65,9 @@ class BaseTask:
         # Progress Tracking
         self.objectives: List[TaskObjective] = []
         self.status_message: str = "Initializing..."
+        
+        # Background Monitor Management
+        self._registered_monitors: List[str] = []
     
     # ==================
     # PROPERTIES
@@ -127,6 +140,98 @@ class BaseTask:
         yield
 
     # ==================
+    # MONITOR MANAGEMENT
+    # ==================
+
+    def register_monitor(self, bot, name: str, coroutine) -> str:
+        """
+        Registers a background coroutine that runs alongside the main task.
+        
+        Monitors are automatically cleaned up when the task finishes (via cleanup_monitors).
+        This eliminates manual try/finally blocks for each monitor.
+        
+        Args:
+            bot: The bot instance
+            name: Unique identifier for this monitor (will be prefixed with task name)
+            coroutine: Generator function to run in background
+            
+        Returns:
+            The full monitor name (for manual removal if needed)
+            
+        Example:
+            self.register_monitor(bot, "BonusTracker", self._track_bonus(obj))
+        """
+        # Create unique name to avoid collisions between tasks
+        full_name = f"{self.name}_{name}"
+        
+        # Register with FSM
+        bot.config.FSM.AddManagedCoroutine(full_name, coroutine)
+        
+        # Track for auto-cleanup
+        self._registered_monitors.append(full_name)
+        
+        Py4GW.Console.Log(
+            BOT_NAME,
+            f"Monitor registered: {full_name}",
+            Py4GW.Console.MessageType.Info
+        )
+        
+        return full_name
+
+    def unregister_monitor(self, bot, name: str):
+        """
+        Manually unregisters a specific monitor.
+        
+        Usually not needed - monitors are auto-cleaned on task end.
+        Use this if you need to stop a monitor mid-task.
+        
+        Args:
+            bot: The bot instance
+            name: The monitor name (as returned by register_monitor, or just the short name)
+        """
+        # Handle both short name and full name
+        full_name = name if name.startswith(self.name) else f"{self.name}_{name}"
+        
+        if full_name in self._registered_monitors:
+            bot.config.FSM.RemoveManagedCoroutine(full_name)
+            self._registered_monitors.remove(full_name)
+            
+            Py4GW.Console.Log(
+                BOT_NAME,
+                f"Monitor unregistered: {full_name}",
+                Py4GW.Console.MessageType.Info
+            )
+
+    def cleanup_monitors(self, bot):
+        """
+        Cleans up all registered monitors.
+        
+        Called automatically by TaskExecutor when task finishes.
+        Can also be called manually in finally block for extra safety.
+        
+        Args:
+            bot: The bot instance
+        """
+        for monitor_name in self._registered_monitors:
+            try:
+                bot.config.FSM.RemoveManagedCoroutine(monitor_name)
+            except Exception as e:
+                Py4GW.Console.Log(
+                    BOT_NAME,
+                    f"Error cleaning up monitor {monitor_name}: {e}",
+                    Py4GW.Console.MessageType.Warning
+                )
+        
+        if self._registered_monitors:
+            Py4GW.Console.Log(
+                BOT_NAME,
+                f"Cleaned up {len(self._registered_monitors)} monitor(s)",
+                Py4GW.Console.MessageType.Info
+            )
+        
+        self._registered_monitors.clear()
+
+    # ==================
     # PROGRESS HELPERS
     # ==================
 
@@ -146,7 +251,12 @@ class BaseTask:
         return obj
 
     def update_status(self, message: str):
-        """Updates the global status message shown at the top of the progress window."""
+        """
+        Updates the global status message shown at the top of the progress window.
+        
+        Args:
+            message: New status message
+        """
         # Prevent log spam by checking if the message is new
         if self.status_message == message:
             return
@@ -154,7 +264,7 @@ class BaseTask:
         self.status_message = message
         Py4GW.Console.Log(
             BOT_NAME, 
-            f"Status Update: {message}", 
+            f"Status: {message}", 
             Py4GW.Console.MessageType.Info
         )
 
@@ -162,6 +272,9 @@ class BaseTask:
         """
         Marks an objective as complete by name.
         Also handles setting current_count to total_count.
+        
+        Args:
+            name: Name of objective to complete
         """
         for obj in self.objectives:
             if obj.name == name:
@@ -171,19 +284,81 @@ class BaseTask:
                 
                 Py4GW.Console.Log(
                     BOT_NAME, 
-                    f"Objective Completed: {name}", 
+                    f"Objective Complete: {name}", 
                     Py4GW.Console.MessageType.Info
                 )
+                return
+        
+        # Objective not found - log warning
+        Py4GW.Console.Log(
+            BOT_NAME,
+            f"Warning: Objective not found: {name}",
+            Py4GW.Console.MessageType.Warning
+        )
 
     def set_active_objective(self, name: str):
-        """Highlights a specific objective as active (orange arrow)."""
+        """
+        Highlights a specific objective as active (orange arrow in UI).
+        Deactivates all other objectives.
+        
+        Args:
+            name: Name of objective to activate
+        """
+        found = False
         for obj in self.objectives:
-            is_new_active = (obj.name == name and not obj.is_active)
+            was_active = obj.is_active
             obj.is_active = (obj.name == name)
             
-            if is_new_active:
+            if obj.is_active and not was_active:
+                found = True
                 Py4GW.Console.Log(
                     BOT_NAME, 
-                    f"New Objective: {name}", 
+                    f"Active Objective: {name}", 
                     Py4GW.Console.MessageType.Info
                 )
+        
+        if not found:
+            Py4GW.Console.Log(
+                BOT_NAME,
+                f"Warning: Objective not found: {name}",
+                Py4GW.Console.MessageType.Warning
+            )
+
+    def fail_objective(self, name: str, reason: str = ""):
+        """
+        Marks an objective as failed.
+        
+        Args:
+            name: Name of objective that failed
+            reason: Optional reason for failure
+        """
+        for obj in self.objectives:
+            if obj.name == name:
+                obj.is_completed = False
+                obj.is_active = True  # Highlight as warning
+                
+                msg = f"Objective Failed: {name}"
+                if reason:
+                    msg += f" ({reason})"
+                
+                Py4GW.Console.Log(
+                    BOT_NAME,
+                    msg,
+                    Py4GW.Console.MessageType.Warning
+                )
+                return
+
+    def get_objective(self, name: str) -> TaskObjective:
+        """
+        Gets an objective by name.
+        
+        Args:
+            name: Name of objective to find
+            
+        Returns:
+            TaskObjective instance or None if not found
+        """
+        for obj in self.objectives:
+            if obj.name == name:
+                return obj
+        return None
