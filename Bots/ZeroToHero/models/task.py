@@ -17,7 +17,7 @@ class TaskInfo:
     """
     Immutable metadata about a task.
     
-    This contains all the static information about a mission/quest/task
+    Contains all static information about a mission/quest/task
     that doesn't change during execution.
     
     Attributes:
@@ -26,7 +26,7 @@ class TaskInfo:
         task_type: TaskType enum (MISSION, QUEST, TASK)
         start_map_id: Required starting map (0 = any map)
         requires_quest_id: Required active quest (0 = none)
-        recommended_builds: List of recommended build codes/descriptions
+        recommended_builds: List of recommended build descriptions
         hm_tips: Strategy tips for Hard Mode
         loadout: Mandatory loadout configuration (optional)
     """

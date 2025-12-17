@@ -11,7 +11,7 @@ from core.constants import (
     BOT_NAME, WINDOW_SIZE, BOT_VERSION, BOT_AUTHOR, Colors, 
     TASK_FILTER_OPTIONS, get_campaign_display_name
 )
-from data.enums import TaskType, GameMode
+from data.enums import TaskType
 from ui.themes import Theme
 
 
@@ -56,14 +56,14 @@ class DashboardUI:
         PyImGui.pop_style_color(1)
         
         PyImGui.same_line(0.0, 5.0)
-        PyImGui.text_colored("Zero To Hero", Colors.INFO_COLOR)
+        PyImGui.text_colored("Zero To Hero", Colors.INFO)
         
         credit = f"v{BOT_VERSION} by {BOT_AUTHOR}"
         avail_w = PyImGui.get_content_region_avail()[0]
         text_w = PyImGui.calc_text_size(credit)[0]
         current_x = PyImGui.get_cursor_pos_x()
         PyImGui.same_line(current_x + avail_w - text_w, -1.0)
-        PyImGui.text_colored(credit, (0.5, 0.5, 0.5, 1.0))
+        PyImGui.text_colored(credit, Colors.MUTED)
         
         PyImGui.separator()
         PyImGui.dummy(0, 5)
@@ -130,16 +130,13 @@ class DashboardUI:
         """Campaign dropdown with display names."""
         PyImGui.text("Select Campaign:")
         if self.bot.campaign_list:
-            # Build display names list
             display_names = [get_campaign_display_name(c) for c in self.bot.campaign_list]
             
             new_idx = PyImGui.combo("##Campaign", self.bot.selected_campaign_idx, display_names)
             if new_idx != self.bot.selected_campaign_idx:
                 self.bot.selected_campaign_idx = new_idx
-                self.bot.current_campaign = self.bot.campaign_list[new_idx]
-                self.bot.refresh_task_list()
         else:
-            PyImGui.text_colored("No Campaigns Found!", Colors.ERROR_COLOR)
+            PyImGui.text_colored("No Campaigns Found!", Colors.ERROR)
     
     def _draw_task_filter(self):
         """Task type filter radio buttons."""
@@ -148,7 +145,6 @@ class DashboardUI:
             new_val = PyImGui.radio_button(option, self.bot.selected_filter_idx, i)
             if new_val != self.bot.selected_filter_idx:
                 self.bot.selected_filter_idx = new_val
-                self.bot.refresh_task_list()
             
             if i < len(TASK_FILTER_OPTIONS) - 1:
                 PyImGui.same_line(0.0, 10.0)
@@ -166,7 +162,6 @@ class DashboardUI:
             t_idx = PyImGui.combo("##Tasks", self.bot.selected_task_idx, self.bot.task_list)
             if t_idx != self.bot.selected_task_idx:
                 self.bot.selected_task_idx = t_idx
-                self.bot.selected_task_name = self.bot.task_list[t_idx]
             
             PyImGui.same_line(0.0, 5.0)
             
@@ -177,7 +172,7 @@ class DashboardUI:
         else:
             PyImGui.text_disabled("No tasks found.")
     
-    def _get_info_button_label(self):
+    def _get_info_button_label(self) -> str:
         """Get appropriate label for info button based on task type."""
         try:
             info = self.bot.task_registry.get_task_info(
@@ -215,9 +210,9 @@ class DashboardUI:
         PyImGui.same_line(0.0, 20.0)
         try:
             if GLOBAL_CACHE.Party.IsHardMode():
-                PyImGui.text_colored("[Game: HM]", Colors.HM_COLOR)
+                PyImGui.text_colored("[Game: HM]", Colors.HARD_MODE)
             else:
-                PyImGui.text_colored("[Game: NM]", Colors.NM_COLOR)
+                PyImGui.text_colored("[Game: NM]", Colors.NORMAL_MODE)
         except:
             PyImGui.text_disabled("[Game: ?]")
         
@@ -252,11 +247,11 @@ class DashboardUI:
             PyImGui.text("State:")
             PyImGui.same_line(0.0, 5.0)
             if self.bot.is_paused:
-                PyImGui.text_colored("PAUSED", (1, 1, 0, 1))
+                PyImGui.text_colored("PAUSED", Colors.WARNING)
             elif self.bot.is_running:
-                PyImGui.text_colored("ACTIVE", Colors.SUCCESS_COLOR)
+                PyImGui.text_colored("ACTIVE", Colors.SUCCESS)
             else:
-                PyImGui.text_colored("IDLE", (0.7, 0.7, 0.7, 1.0))
+                PyImGui.text_colored("IDLE", Colors.MUTED)
             
             # Current task
             PyImGui.dummy(0, 2)
@@ -269,12 +264,12 @@ class DashboardUI:
                 if task_type == TaskType.MISSION:
                     PyImGui.same_line(0.0, 10.0)
                     if self.bot.current_task_instance.use_hard_mode:
-                        PyImGui.text_colored("[HM]", Colors.HM_COLOR)
+                        PyImGui.text_colored("[HM]", Colors.HARD_MODE)
                     else:
-                        PyImGui.text_colored("[NM]", Colors.NM_COLOR)
+                        PyImGui.text_colored("[NM]", Colors.NORMAL_MODE)
             
             # Queue length
             q_len = self.bot.task_registry.get_queue_length()
-            PyImGui.text_colored(f"Tasks in Queue: {q_len}", (0.5, 0.5, 0.5, 1.0))
+            PyImGui.text_colored(f"Tasks in Queue: {q_len}", Colors.MUTED)
         
         PyImGui.end_child()

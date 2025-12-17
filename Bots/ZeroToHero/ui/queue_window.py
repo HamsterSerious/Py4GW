@@ -6,88 +6,89 @@ from Py4GWCoreLib.ImGui_src.IconsFontAwesome5 import IconsFontAwesome5
 
 from core.constants import Colors, QUEUE_WINDOW_SIZE
 from data.enums import TaskType
+from ui.base_window import ClosableWindow
 
 
-class QueueWindow:
+class QueueWindow(ClosableWindow):
     """Task queue management interface."""
     
-    def __init__(self, bot):
-        """
-        Args:
-            bot: Reference to ZeroToHeroBot instance
-        """
-        self.bot = bot
-        self.first_run = True
+    TITLE = "Queue Manager"
+    SIZE = QUEUE_WINDOW_SIZE
     
-    def draw(self):
-        """Draw the queue window."""
-        if not self.bot.show_queue_window:
-            self.first_run = True
-            return
-        
-        # Set initial window size on first open
-        if self.first_run:
-            PyImGui.set_next_window_size(*QUEUE_WINDOW_SIZE)
-            self.first_run = False
-        
-        if PyImGui.begin("Queue Manager", 0):
-            PyImGui.text_colored("Execution Queue", Colors.HEADER)
-            PyImGui.separator()
-            
-            queue_len = self.bot.task_registry.get_queue_length()
-            
-            if queue_len == 0:
-                PyImGui.text_disabled("Queue is empty.")
-            else:
-                self._draw_queue_items(queue_len)
-            
-            PyImGui.separator()
-            if PyImGui.button("Close", -1, 0):
-                self.bot.show_queue_window = False
-        
-        PyImGui.end()
+    @property
+    def is_visible(self) -> bool:
+        return self.bot.show_queue_window
     
-    def _draw_queue_items(self, queue_len):
+    def set_visible(self, visible: bool):
+        self.bot.show_queue_window = visible
+    
+    def draw_body(self):
+        """Draw the queue contents."""
+        PyImGui.text_colored("Execution Queue", Colors.HEADER)
+        PyImGui.separator()
+        
+        queue_len = self.bot.task_registry.get_queue_length()
+        
+        if queue_len == 0:
+            PyImGui.text_disabled("Queue is empty.")
+        else:
+            self._draw_queue_items(queue_len)
+    
+    def _draw_queue_items(self, queue_len: int):
         """Draw all items in the queue with controls."""
         for i in range(queue_len):
             queued_task = self.bot.task_registry.task_queue[i]
-            task_name = queued_task.name
-            task_type = queued_task.task_type
-            is_hm = queued_task.hard_mode
             
             PyImGui.push_id(str(i))
             
-            # Up button
-            if PyImGui.button(IconsFontAwesome5.ICON_ARROW_UP):
-                self.bot.task_registry.move_task_up(i)
-            PyImGui.same_line(0.0, 5.0)
-            
-            # Down button
-            if PyImGui.button(IconsFontAwesome5.ICON_ARROW_DOWN):
-                self.bot.task_registry.move_task_down(i)
-            PyImGui.same_line(0.0, 5.0)
-            
-            # Remove button
-            if PyImGui.button(IconsFontAwesome5.ICON_TIMES):
-                self.bot.task_registry.remove_task_at_index(i)
+            # Control buttons
+            if self._draw_item_controls(i):
                 PyImGui.pop_id()
-                break
+                break  # Item was removed, list changed
             
-            PyImGui.same_line(0.0, 10.0)
-            
-            # Task number
-            PyImGui.text(f"{i+1}.")
-            PyImGui.same_line(0.0, 5.0)
-            
-            # Mode indicator for missions
-            if task_type == TaskType.MISSION:
-                if is_hm:
-                    PyImGui.text_colored("[HM]", Colors.HM_COLOR)
-                else:
-                    PyImGui.text_colored("[NM]", Colors.NM_COLOR)
-                PyImGui.same_line(0.0, 5.0)
-            
-            # Task name
-            PyImGui.text(task_name)
+            # Task info
+            self._draw_item_info(i, queued_task)
             
             PyImGui.pop_id()
+    
+    def _draw_item_controls(self, index: int) -> bool:
+        """
+        Draw up/down/remove buttons for a queue item.
+        
+        Returns:
+            True if item was removed (caller should break loop)
+        """
+        # Up button
+        if PyImGui.button(IconsFontAwesome5.ICON_ARROW_UP):
+            self.bot.task_registry.move_task_up(index)
+        PyImGui.same_line(0.0, 5.0)
+        
+        # Down button
+        if PyImGui.button(IconsFontAwesome5.ICON_ARROW_DOWN):
+            self.bot.task_registry.move_task_down(index)
+        PyImGui.same_line(0.0, 5.0)
+        
+        # Remove button
+        if PyImGui.button(IconsFontAwesome5.ICON_TIMES):
+            self.bot.task_registry.remove_task_at_index(index)
+            return True
+        
+        PyImGui.same_line(0.0, 10.0)
+        return False
+    
+    def _draw_item_info(self, index: int, queued_task):
+        """Draw task number, mode, and name."""
+        # Task number
+        PyImGui.text(f"{index + 1}.")
+        PyImGui.same_line(0.0, 5.0)
+        
+        # Mode indicator for missions
+        if queued_task.task_type == TaskType.MISSION:
+            if queued_task.hard_mode:
+                PyImGui.text_colored("[HM]", Colors.HARD_MODE)
+            else:
+                PyImGui.text_colored("[NM]", Colors.NORMAL_MODE)
+            PyImGui.same_line(0.0, 5.0)
+        
+        # Task name
+        PyImGui.text(queued_task.name)

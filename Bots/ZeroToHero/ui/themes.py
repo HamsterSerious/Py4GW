@@ -20,8 +20,6 @@ class Theme:
     @classmethod
     def push_styles(cls):
         """Push common style modifications. Currently a no-op."""
-        # PyImGui.ImGuiStyleVar not available in Py4GW
-        # Add styling here once correct API is known
         pass
     
     @classmethod

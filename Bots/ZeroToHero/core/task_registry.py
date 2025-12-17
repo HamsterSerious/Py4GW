@@ -13,7 +13,7 @@ import inspect
 import Py4GW
 
 from core.base_task import BaseTask
-from data.enums import TaskType, GameMode
+from data.enums import TaskType
 from models.task import TaskInfo, QueuedTask
 
 
@@ -31,7 +31,7 @@ class TaskRegistry:
         self.task_queue = []       # List of QueuedTask objects
         self.current_task_instance = None
         
-        # Root path for campaigns - go up from core/ to ZeroToHero/, then to campaigns/
+        # Root path for campaigns
         base_dir = os.path.dirname(os.path.dirname(__file__))
         self.campaigns_path = os.path.join(base_dir, "campaigns")
         
@@ -69,10 +69,8 @@ class TaskRegistry:
                 else:
                     self._scan_standard_campaign(campaign_path, base_import_path, campaign_name)
 
-    def _scan_standard_campaign(self, campaign_path, base_import_path, campaign_name):
-        """
-        Scans standard campaign structure (missions/ and quests/ folders).
-        """
+    def _scan_standard_campaign(self, campaign_path: str, base_import_path: str, campaign_name: str):
+        """Scans standard campaign structure (missions/ and quests/ folders)."""
         scan_targets = [
             ("missions", f"{base_import_path}.missions"),
             ("quests", f"{base_import_path}.quests"),
@@ -84,10 +82,8 @@ class TaskRegistry:
             if os.path.exists(target_dir):
                 self._scan_directory(target_dir, import_path, campaign_name)
 
-    def _scan_extra_campaign(self, campaign_path, base_import_path, campaign_name):
-        """
-        Scans the 'extra' campaign by recursively scanning all subdirectories.
-        """
+    def _scan_extra_campaign(self, campaign_path: str, base_import_path: str, campaign_name: str):
+        """Scans the 'extra' campaign by recursively scanning all subdirectories."""
         for item in os.listdir(campaign_path):
             item_path = os.path.join(campaign_path, item)
             
@@ -104,10 +100,8 @@ class TaskRegistry:
             
             self._scan_directory(item_path, category_import_path, campaign_name)
 
-    def _scan_directory(self, disk_path, import_path, campaign_name):
-        """
-        Scans a directory for task modules (mission_*.py or quest_*.py).
-        """
+    def _scan_directory(self, disk_path: str, import_path: str, campaign_name: str):
+        """Scans a directory for task modules (mission_*.py or quest_*.py)."""
         try:
             for _, name, _ in pkgutil.iter_modules([disk_path]):
                 if name.startswith("mission_") or name.startswith("quest_"):
@@ -141,38 +135,28 @@ class TaskRegistry:
         if not inspect.isclass(cls):
             return False
         
-        # Must have required methods
-        if not (hasattr(cls, "get_info") or hasattr(cls, "GetInfo")):
+        # Must be a subclass of BaseTask (but not BaseTask itself)
+        if not issubclass(cls, BaseTask):
             return False
         
-        if not (hasattr(cls, "execute") or hasattr(cls, "Execution_Routine")):
+        if cls is BaseTask:
             return False
         
-        # Skip BaseTask itself
-        if cls is BaseTask or cls.__name__ == "BaseTask":
+        # Must have get_info class method
+        if not hasattr(cls, "get_info"):
+            return False
+        
+        # Must have execute method
+        if not hasattr(cls, "execute"):
             return False
         
         return True
 
-    def _register_task(self, cls, campaign_name):
+    def _register_task(self, cls, campaign_name: str):
         """Register a task class and cache its info."""
         try:
-            # Get task info (prefer new method, fall back to legacy)
-            if hasattr(cls, 'get_info'):
-                info = cls.get_info()
-                task_display_name = info.name
-            else:
-                temp_inst = cls()
-                legacy_info = temp_inst.GetInfo()
-                task_display_name = legacy_info.get("Name", cls.__name__)
-                # Convert legacy info to TaskInfo for caching
-                info = TaskInfo(
-                    name=task_display_name,
-                    description=legacy_info.get("Description", ""),
-                    task_type=TaskType(legacy_info.get("Type", "Task")),
-                    recommended_builds=legacy_info.get("Recommended_Builds", []),
-                    hm_tips=legacy_info.get("HM_Tips", "")
-                )
+            info = cls.get_info()
+            task_display_name = info.name
             
             # Register the task
             self.available_tasks[campaign_name][task_display_name] = cls
@@ -195,17 +179,17 @@ class TaskRegistry:
     # CAMPAIGN/TASK ACCESS
     # ==================
 
-    def get_campaigns(self):
+    def get_campaigns(self) -> list:
         """Returns list of available campaign names."""
         return list(self.available_tasks.keys())
 
-    def get_tasks_for_campaign(self, campaign_name):
+    def get_tasks_for_campaign(self, campaign_name: str) -> list:
         """Returns list of task names for a campaign."""
         if campaign_name in self.available_tasks:
             return list(self.available_tasks[campaign_name].keys())
         return []
 
-    def get_task_info(self, campaign_name, task_name) -> TaskInfo:
+    def get_task_info(self, campaign_name: str, task_name: str) -> TaskInfo:
         """
         Get cached TaskInfo for a task.
         
@@ -220,7 +204,7 @@ class TaskRegistry:
             return self.task_info_cache[campaign_name].get(task_name)
         return None
 
-    def get_task_class(self, campaign_name, task_name):
+    def get_task_class(self, campaign_name: str, task_name: str):
         """
         Get the task class for a task.
         
@@ -235,7 +219,7 @@ class TaskRegistry:
     # QUEUE MANAGEMENT
     # ==================
 
-    def add_task_to_queue(self, campaign_name, task_name, hard_mode=False):
+    def add_task_to_queue(self, campaign_name: str, task_name: str, hard_mode: bool = False):
         """
         Adds a task to the queue.
         
@@ -272,7 +256,7 @@ class TaskRegistry:
                 Py4GW.Console.MessageType.Info
             )
 
-    def set_queue_to_campaign(self, campaign_name, hard_mode=False):
+    def set_queue_to_campaign(self, campaign_name: str, hard_mode: bool = False):
         """Add all tasks from a campaign to the queue."""
         self.clear_queue()
         tasks = self.get_tasks_for_campaign(campaign_name)
@@ -302,7 +286,7 @@ class TaskRegistry:
             return self.task_queue[0]
         return None
 
-    def has_active_task(self):
+    def has_active_task(self) -> bool:
         """Check if there's an active task running."""
         return self.current_task_instance is not None
 
@@ -314,7 +298,7 @@ class TaskRegistry:
     # QUEUE REORDERING
     # ==================
 
-    def remove_task_at_index(self, index):
+    def remove_task_at_index(self, index: int):
         """Remove a task from the queue by index."""
         if 0 <= index < len(self.task_queue):
             removed = self.task_queue.pop(index)
@@ -324,9 +308,9 @@ class TaskRegistry:
                 Py4GW.Console.MessageType.Info
             )
 
-    def move_task_up(self, index):
+    def move_task_up(self, index: int):
         """Move a task up in the queue."""
-        if index > 0 and index < len(self.task_queue):
+        if 0 < index < len(self.task_queue):
             self.task_queue[index], self.task_queue[index - 1] = \
                 self.task_queue[index - 1], self.task_queue[index]
             Py4GW.Console.Log(
@@ -335,9 +319,9 @@ class TaskRegistry:
                 Py4GW.Console.MessageType.Info
             )
 
-    def move_task_down(self, index):
+    def move_task_down(self, index: int):
         """Move a task down in the queue."""
-        if index < len(self.task_queue) - 1 and index >= 0:
+        if 0 <= index < len(self.task_queue) - 1:
             self.task_queue[index], self.task_queue[index + 1] = \
                 self.task_queue[index + 1], self.task_queue[index]
             Py4GW.Console.Log(

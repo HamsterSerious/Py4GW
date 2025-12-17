@@ -4,32 +4,32 @@ Constants and configuration values for Zero To Hero bot.
 
 # Bot Identity
 BOT_NAME = "ZeroToHero"
-BOT_VERSION = "0.2.0"
+BOT_VERSION = "0.3.0"  # Bumped for refactor
 BOT_AUTHOR = "Paul"
 
 # Window Configuration
-WINDOW_SIZE = (450, 600)  # Main dashboard (wider + taller)
-QUEUE_WINDOW_SIZE = (400, 350)  # Queue manager (larger)
-TASK_INFO_WINDOW_SIZE = (500, 300)  # Task info (wider, shorter)
-NOTIFICATION_WINDOW_SIZE = (550, 350)  # Requirement warning (wider, shorter)
+WINDOW_SIZE = (450, 600)
+QUEUE_WINDOW_SIZE = (400, 350)
+TASK_INFO_WINDOW_SIZE = (500, 300)
+NOTIFICATION_WINDOW_SIZE = (550, 350)
+TEAM_WINDOW_SIZE = (500, 450)
 
-# Campaign display order (folder names)
+# Campaign display order (must match actual folder names in campaigns/)
 CAMPAIGN_ORDER = [
     "prophecies",
     "factions",
     "nightfall",
-    "eye_of_the_north",
+    "eotn",      # Fixed: was "eye_of_the_north"
     "extra"
 ]
 
 # Campaign display names (folder name -> display name)
 CAMPAIGN_DISPLAY_NAMES = {
-    "prophecies": "Prophecies (Missions + Main Quests)",
-    "factions": "Factions (Missions + Main Quests)",
-    "nightfall": "Nightfall (Missions + Main Quests)",
-    "eye_of_the_north": "Eye of the North (Missions + Main Quests)",
-    "eotn": "Eye of the North (Missions + Main Quests)",
-    "extra": "Extra (Skill Unlocks etc.)"
+    "prophecies": "Prophecies",
+    "factions": "Factions",
+    "nightfall": "Nightfall",
+    "eotn": "Eye of the North",
+    "extra": "Extra (Skills, Farming, etc.)"
 }
 
 # Task filter options for UI dropdown
@@ -44,21 +44,31 @@ def get_campaign_display_name(folder_name: str) -> str:
 class Colors:
     """Standard colors used throughout the UI."""
     
-    # Text colors
-    HEADER = (0.4, 0.8, 1.0, 1.0)       # Light blue for headers
-    INFO_COLOR = (0.3, 0.7, 1.0, 1.0)   # Blue for info text
-    SUCCESS_COLOR = (0.3, 1.0, 0.3, 1.0) # Green for success
-    WARN_COLOR = (1.0, 0.8, 0.2, 1.0)   # Yellow for warnings
-    ERROR_COLOR = (1.0, 0.3, 0.3, 1.0)  # Red for errors
+    # Text colors (RGBA tuples)
+    HEADER = (0.4, 0.8, 1.0, 1.0)        # Light blue for headers
+    INFO = (0.3, 0.7, 1.0, 1.0)          # Blue for info text
+    SUCCESS = (0.3, 1.0, 0.3, 1.0)       # Green for success
+    WARNING = (1.0, 0.8, 0.2, 1.0)       # Yellow for warnings
+    ERROR = (1.0, 0.3, 0.3, 1.0)         # Red for errors
     
     # Mode indicators
-    HM_COLOR = (1.0, 0.5, 0.3, 1.0)     # Orange for Hard Mode
-    NM_COLOR = (0.5, 0.8, 0.5, 1.0)     # Light green for Normal Mode
+    HARD_MODE = (1.0, 0.5, 0.3, 1.0)     # Orange for Hard Mode
+    NORMAL_MODE = (0.5, 0.8, 0.5, 1.0)   # Light green for Normal Mode
     
     # UI elements
-    ICON = (0.5, 0.8, 1.0, 1.0)         # Icon tint color
-    DISABLED = (0.5, 0.5, 0.5, 1.0)     # Grayed out
+    ICON = (0.5, 0.8, 1.0, 1.0)          # Icon tint color
+    DISABLED = (0.5, 0.5, 0.5, 1.0)      # Grayed out
+    MUTED = (0.6, 0.6, 0.6, 1.0)         # Muted text
+    BUILD_CODE = (0.7, 1.0, 0.7, 1.0)    # Build code text (clickable)
     
     # Background colors (with alpha)
     PANEL_BG = (0.15, 0.15, 0.15, 0.95)
     HIGHLIGHT_BG = (0.3, 0.3, 0.4, 0.8)
+    
+    # Legacy aliases (for backward compatibility during refactor)
+    INFO_COLOR = INFO
+    SUCCESS_COLOR = SUCCESS
+    WARN_COLOR = WARNING
+    ERROR_COLOR = ERROR
+    HM_COLOR = HARD_MODE
+    NM_COLOR = NORMAL_MODE

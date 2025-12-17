@@ -11,6 +11,8 @@ from Py4GWCoreLib import Routines
 from Py4GWCoreLib.GlobalCache import GLOBAL_CACHE
 
 from data.enums import GameMode
+from data.timing import Timing
+from models.requirements import TaskRequirementsAccessor
 
 
 class Transition:
@@ -20,14 +22,17 @@ class Transition:
     
     def __init__(self):
         pass
-
-    def TravelTo(self, map_id):
+    
+    def travel_to(self, map_id: int):
         """
         Handles traveling to a map. Disbands party to avoid issues.
         
         Args:
             map_id: Target map ID to travel to
+            
+        Yields for coroutine execution.
         """
+        # Disband party before travel
         if GLOBAL_CACHE.Party.GetPartySize() > 1:
             Py4GW.Console.Log(
                 "Transition", 
@@ -35,8 +40,9 @@ class Transition:
                 Py4GW.Console.MessageType.Info
             )
             GLOBAL_CACHE.Party.Heroes.KickAllHeroes()
-            yield from Routines.Yield.wait(1000)
-
+            yield from Routines.Yield.wait(Timing.MAP_LOAD_BUFFER)
+        
+        # Check if already at destination
         current_map = GLOBAL_CACHE.Map.GetMapID()
         if current_map == map_id:
             Py4GW.Console.Log(
@@ -45,7 +51,7 @@ class Transition:
                 Py4GW.Console.MessageType.Info
             )
             return
-
+        
         Py4GW.Console.Log(
             "Transition", 
             f"Traveling to Map ID: {map_id}", 
@@ -53,14 +59,15 @@ class Transition:
         )
         
         GLOBAL_CACHE.Map.Travel(map_id)
-        yield from Routines.Yield.wait(2000)
+        yield from Routines.Yield.wait(Timing.MAP_TRAVEL_INITIAL)
         
+        # Wait for map to be ready
         while not GLOBAL_CACHE.Map.IsMapReady():
-            yield from Routines.Yield.wait(500)
-            
-        yield from Routines.Yield.wait(1000)
-
-    def SetupMission(self, bot, use_hard_mode=False):
+            yield from Routines.Yield.wait(Timing.MAP_READY_POLL)
+        
+        yield from Routines.Yield.wait(Timing.MAP_LOAD_BUFFER)
+    
+    def setup_mission(self, bot, use_hard_mode: bool = False):
         """
         Sets up the team based on the current mission settings.
         Handles HM toggling and team loading with mandatory heroes.
@@ -68,35 +75,94 @@ class Transition:
         Args:
             bot: The bot instance
             use_hard_mode: Whether to set Hard Mode
+            
+        Yields for coroutine execution.
         """
         game_mode = GameMode.from_bool(use_hard_mode)
         
-        # 1. Handle Hard Mode Toggle
+        # Handle Hard Mode Toggle
         yield from self._sync_hard_mode(use_hard_mode)
-
-        # 2. Determine Party Size from game
+        
+        # Determine Party Size from game
         party_size = self._get_party_size()
-
-        # 3. Get mandatory heroes from current task
+        
+        # Get mandatory heroes from current task
         mandatory_list = self._get_mandatory_heroes(bot, game_mode)
         mission_name = self._get_mission_name(bot)
-
-        # 4. Load Team
+        
+        # Load Team
         if mandatory_list:
             Py4GW.Console.Log(
                 "Transition", 
                 f"Loading team with {len(mandatory_list)} mandatory hero(es)", 
                 Py4GW.Console.MessageType.Info
             )
-            yield from bot.team_manager.LoadTeamWithMandatoryHeroes(
+            yield from bot.team_manager.load_team_with_mandatory_heroes(
                 party_size, 
-                game_mode.value,  # "NM" or "HM"
+                game_mode.value,
                 mandatory_list,
                 mission_name=mission_name
             )
         else:
-            yield from bot.team_manager.LoadTeam(party_size, game_mode.value)
-
+            yield from bot.team_manager.load_team(party_size, game_mode.value)
+    
+    def move_to_and_interact(self, bot, npc_id: int):
+        """
+        Moves to an NPC and interacts.
+        
+        Args:
+            bot: The bot instance
+            npc_id: Agent ID of the NPC to interact with
+            
+        Yields for coroutine execution.
+        """
+        Py4GW.Console.Log(
+            "Transition", 
+            f"Approaching NPC {npc_id}...", 
+            Py4GW.Console.MessageType.Info
+        )
+        
+        GLOBAL_CACHE.Player.ChangeTarget(npc_id)
+        GLOBAL_CACHE.Player.MoveToTarget(npc_id)
+        
+        # Wait for movement
+        yield from Routines.Yield.wait(Timing.MEDIUM_DELAY)
+        while GLOBAL_CACHE.Player.IsMoving():
+            yield from Routines.Yield.wait(Timing.MOVEMENT_POLL)
+        
+        GLOBAL_CACHE.Player.Interact(npc_id)
+        yield from Routines.Yield.wait(Timing.INTERACT_DELAY)
+    
+    def enter_mission(self, bot):
+        """
+        Wait for mission entry after interacting with NPC.
+        Use this after move_to_and_interact with a mission NPC.
+        
+        Yields for coroutine execution.
+        """
+        Py4GW.Console.Log(
+            "Transition", 
+            "Waiting for mission load...", 
+            Py4GW.Console.MessageType.Info
+        )
+        
+        yield from Routines.Yield.wait(Timing.MISSION_LOAD_INITIAL)
+        
+        while not GLOBAL_CACHE.Map.IsMapReady():
+            yield from Routines.Yield.wait(Timing.MAP_READY_POLL)
+        
+        yield from Routines.Yield.wait(Timing.MAP_LOAD_BUFFER)
+        
+        Py4GW.Console.Log(
+            "Transition", 
+            "Mission loaded.", 
+            Py4GW.Console.MessageType.Success
+        )
+    
+    # ==================
+    # PRIVATE HELPERS
+    # ==================
+    
     def _sync_hard_mode(self, use_hard_mode: bool):
         """Synchronize game's hard mode setting with desired mode."""
         is_hm = GLOBAL_CACHE.Party.IsHardMode()
@@ -108,7 +174,7 @@ class Transition:
                 Py4GW.Console.MessageType.Info
             )
             GLOBAL_CACHE.Party.SetHardMode(True)
-            yield from Routines.Yield.wait(1000)
+            yield from Routines.Yield.wait(Timing.HARD_MODE_TOGGLE)
         elif not use_hard_mode and is_hm:
             Py4GW.Console.Log(
                 "Transition", 
@@ -116,8 +182,8 @@ class Transition:
                 Py4GW.Console.MessageType.Info
             )
             GLOBAL_CACHE.Party.SetHardMode(False)
-            yield from Routines.Yield.wait(1000)
-
+            yield from Routines.Yield.wait(Timing.HARD_MODE_TOGGLE)
+    
     def _get_party_size(self) -> int:
         """Get the maximum party size for current map."""
         try:
@@ -135,108 +201,53 @@ class Transition:
                 Py4GW.Console.MessageType.Warning
             )
             return 8
-
+    
     def _get_mandatory_heroes(self, bot, game_mode: GameMode) -> list:
         """
         Extract mandatory hero requirements from current task.
         
-        Returns list of hero requirement dicts for backward compatibility
-        with team_manager.
+        Uses TaskRequirementsAccessor for clean access.
+        
+        Returns:
+            List of HeroRequirements (empty if none)
         """
-        if not bot.current_task_instance:
+        if not bot.executor.current_task:
             return []
         
         try:
-            # Try new-style get_info() first
-            if hasattr(bot.current_task_instance, 'get_info'):
-                info = bot.current_task_instance.get_info()
-                
-                if info.loadout:
-                    loadout = info.loadout.get_for_mode(game_mode)
-                    if loadout and loadout.required_heroes:
-                        # Convert HeroRequirement dataclasses to dicts for compatibility
-                        return [
-                            {
-                                "HeroID": h.hero_id,
-                                "Role": h.role,
-                                "Build": h.build,
-                                "Expected_Skills": h.expected_skills,
-                                "Equipment": h.equipment,
-                                "Weapons": h.weapons
-                            }
-                            for h in loadout.required_heroes
-                        ]
-            
-            # Fall back to legacy GetInfo() method
-            legacy_info = bot.current_task_instance.GetInfo()
-            mandatory_data = legacy_info.get("Mandatory_Loadout", {})
-            
-            mode_str = game_mode.value  # "NM" or "HM"
-            if mode_str in mandatory_data:
-                reqs = mandatory_data[mode_str]
-                if "Required_Heroes" in reqs:
-                    return reqs["Required_Heroes"]
-                    
+            task_info = bot.executor.current_task.get_info()
+            accessor = TaskRequirementsAccessor(task_info)
+            return accessor.get_hero_requirements_for_mode(game_mode)
         except Exception as e:
             Py4GW.Console.Log(
                 "Transition", 
                 f"Error reading mandatory heroes: {e}", 
                 Py4GW.Console.MessageType.Warning
             )
-        
-        return []
-
+            return []
+    
     def _get_mission_name(self, bot) -> str:
         """Get the name of the current mission/task."""
-        if bot.current_task_instance:
-            return bot.current_task_instance.name
+        if bot.executor.current_task:
+            return bot.executor.current_task.name
         return ""
-
-    def MoveToAndInteract(self, bot, npc_id):
-        """
-        Moves to an NPC and interacts.
-        
-        Args:
-            bot: The bot instance
-            npc_id: Agent ID of the NPC to interact with
-        """
-        Py4GW.Console.Log(
-            "Transition", 
-            f"Approaching NPC {npc_id}...", 
-            Py4GW.Console.MessageType.Info
-        )
-        
-        GLOBAL_CACHE.Player.ChangeTarget(npc_id)
-        GLOBAL_CACHE.Player.MoveToTarget(npc_id)
-        
-        # Wait for movement
-        yield from Routines.Yield.wait(500)
-        while GLOBAL_CACHE.Player.IsMoving():
-            yield from Routines.Yield.wait(100)
-            
-        GLOBAL_CACHE.Player.Interact(npc_id)
-        yield from Routines.Yield.wait(1000)
-
+    
+    # ==================
+    # LEGACY ALIASES
+    # ==================
+    
+    def TravelTo(self, map_id: int):
+        """Legacy method name - use travel_to() instead."""
+        yield from self.travel_to(map_id)
+    
+    def SetupMission(self, bot, use_hard_mode: bool = False):
+        """Legacy method name - use setup_mission() instead."""
+        yield from self.setup_mission(bot, use_hard_mode)
+    
+    def MoveToAndInteract(self, bot, npc_id: int):
+        """Legacy method name - use move_to_and_interact() instead."""
+        yield from self.move_to_and_interact(bot, npc_id)
+    
     def EnterMission(self, bot):
-        """
-        Wait for mission entry after interacting with NPC.
-        Use this after MoveToAndInteract with a mission NPC.
-        """
-        Py4GW.Console.Log(
-            "Transition", 
-            "Waiting for mission load...", 
-            Py4GW.Console.MessageType.Info
-        )
-        
-        yield from Routines.Yield.wait(2000)
-        
-        while not GLOBAL_CACHE.Map.IsMapReady():
-            yield from Routines.Yield.wait(500)
-        
-        yield from Routines.Yield.wait(1000)
-        
-        Py4GW.Console.Log(
-            "Transition", 
-            "Mission loaded.", 
-            Py4GW.Console.MessageType.Success
-        )
+        """Legacy method name - use enter_mission() instead."""
+        yield from self.enter_mission(bot)

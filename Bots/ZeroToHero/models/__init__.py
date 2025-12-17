@@ -9,3 +9,25 @@ from .loadout import (
     LoadoutConfig
 )
 from .task import TaskInfo, QueuedTask
+from .requirements import (
+    PlayerRequirements,
+    HeroRequirements,
+    LoadoutRequirements,
+    TaskRequirementsAccessor
+)
+
+__all__ = [
+    # Loadout (original dataclasses)
+    'HeroRequirement',
+    'PlayerBuildRequirement',
+    'MandatoryLoadout',
+    'LoadoutConfig',
+    # Task
+    'TaskInfo',
+    'QueuedTask',
+    # Requirements (unified access)
+    'PlayerRequirements',
+    'HeroRequirements',
+    'LoadoutRequirements',
+    'TaskRequirementsAccessor',
+]

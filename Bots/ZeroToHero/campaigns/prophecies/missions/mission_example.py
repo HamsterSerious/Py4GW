@@ -7,6 +7,7 @@ from Py4GWCoreLib.enums_src.Hero_enums import HeroType
 
 from core.base_task import BaseTask
 from data.enums import TaskType, GameMode
+from data.timing import Timing
 from models.task import TaskInfo
 from models.loadout import (
     LoadoutConfig,
@@ -18,7 +19,7 @@ from models.loadout import (
 
 class Mission_Example(BaseTask):
     """
-    Example mission demonstrating the new TaskInfo pattern.
+    Example mission demonstrating the TaskInfo pattern.
     
     This serves as a template for creating new missions.
     """
@@ -27,7 +28,7 @@ class Mission_Example(BaseTask):
     INFO = TaskInfo(
         name="Example Mission (Ascalon)",
         description="This is an example mission template showing how to define "
-                    "task metadata using the new dataclass pattern.",
+                    "task metadata using the dataclass pattern.",
         task_type=TaskType.MISSION,
         start_map_id=148,  # Example: Ascalon City
         
@@ -40,7 +41,7 @@ class Mission_Example(BaseTask):
         
         # Optional: mandatory loadout requirements
         loadout=LoadoutConfig(
-            # Normal mode requirements (or None if no special requirements)
+            # Normal mode requirements (None if no special requirements)
             normal_mode=None,
             
             # Hard mode requirements
@@ -102,7 +103,7 @@ class Mission_Example(BaseTask):
     
     MISSION_NPC_ID = 12345  # Example NPC ID
     
-    def PreRunCheck(self, bot) -> tuple:
+    def pre_run_check(self, bot) -> tuple:
         """
         Verify preconditions before starting the mission.
         """
@@ -120,22 +121,22 @@ class Mission_Example(BaseTask):
             bot: The bot instance with access to all systems
         """
         # 1. Travel to mission outpost
-        yield from bot.transition.TravelTo(self.INFO.start_map_id)
+        yield from bot.transition.travel_to(self.INFO.start_map_id)
         
         # 2. Setup team and enter mission
-        yield from bot.transition.SetupMission(bot, self.use_hard_mode)
+        yield from bot.transition.setup_mission(bot, self.use_hard_mode)
         
         # 3. Talk to NPC to enter mission (if applicable)
-        # yield from bot.transition.MoveToAndInteract(bot, self.MISSION_NPC_ID)
-        # yield from bot.transition.EnterMission(bot)
+        # yield from bot.transition.move_to_and_interact(bot, self.MISSION_NPC_ID)
+        # yield from bot.transition.enter_mission(bot)
         
         # 4. Execute mission waypoints
         for x, y in self.WAYPOINTS:
-            yield from bot.movement.MoveTo(x, y)
+            yield from bot.movement.move_to(x, y)
             
             # Optional: Combat handling
-            # if bot.combat.InCombat():
-            #     yield from bot.combat.Fight()
+            # if bot.combat.in_combat():
+            #     yield from bot.combat.fight()
         
         # 5. Mark as complete
         self.finished = True
@@ -158,8 +159,8 @@ class Mission_Minimal(BaseTask):
     )
     
     def execute(self, bot):
-        yield from bot.transition.TravelTo(self.INFO.start_map_id)
-        yield from bot.transition.SetupMission(bot, self.use_hard_mode)
+        yield from bot.transition.travel_to(self.INFO.start_map_id)
+        yield from bot.transition.setup_mission(bot, self.use_hard_mode)
         # ... mission logic here
         self.finished = True
 
@@ -184,7 +185,7 @@ class Quest_Example(BaseTask):
     QUEST_GIVER_ID = 54321
     
     def execute(self, bot):
-        yield from bot.transition.TravelTo(self.INFO.start_map_id)
-        yield from bot.movement.MoveTo(1000, 2000)
+        yield from bot.transition.travel_to(self.INFO.start_map_id)
+        yield from bot.movement.move_to(1000, 2000)
         # ... quest logic
         self.finished = True
