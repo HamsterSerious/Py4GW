@@ -56,7 +56,9 @@ class TeamConfigManager:
             self.character_name = sanitize_string(raw_name)
         
         # Setup paths
-        base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
+        # FIX: Reduced from 4 to 3 dirname calls to correctly locate the ZeroToHero/configs folder
+        # 1. systems/team -> 2. systems -> 3. ZeroToHero
+        base_dir = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
         config_dir = os.path.join(base_dir, "configs")
         
         if not os.path.exists(config_dir):

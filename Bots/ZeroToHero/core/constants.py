@@ -13,6 +13,7 @@ QUEUE_WINDOW_SIZE = (400, 350)
 TASK_INFO_WINDOW_SIZE = (500, 300)
 NOTIFICATION_WINDOW_SIZE = (550, 350)
 TEAM_WINDOW_SIZE = (500, 450)
+PROGRESS_WINDOW_SIZE = (350, 250)
 
 # Campaign display order (must match actual folder names in campaigns/)
 CAMPAIGN_ORDER = [

@@ -1,191 +1,48 @@
-"""
-Example Mission - Template for creating new missions.
-
-Copy this file and modify for your own missions.
-"""
-from Py4GWCoreLib.enums_src.Hero_enums import HeroType
-
 from core.base_task import BaseTask
-from data.enums import TaskType, GameMode
-from data.timing import Timing
 from models.task import TaskInfo
-from models.loadout import (
-    LoadoutConfig,
-    MandatoryLoadout,
-    PlayerBuildRequirement,
-    HeroRequirement
-)
+from data.enums import TaskType
 
-
-class Mission_Example(BaseTask):
-    """
-    Example mission demonstrating the TaskInfo pattern.
-    
-    This serves as a template for creating new missions.
-    """
-    
-    # Task metadata - define at class level
+class MissionExample(BaseTask):
     INFO = TaskInfo(
-        name="Example Mission (Ascalon)",
-        description="This is an example mission template showing how to define "
-                    "task metadata using the dataclass pattern.",
-        task_type=TaskType.MISSION,
-        start_map_id=148,  # Example: Ascalon City
-        
-        # Optional: recommended builds for general use
-        recommended_builds=["Warrior", "Elementalist", "Any caster"],
-        
-        # Optional: hard mode tips
-        hm_tips="In Hard Mode, enemies hit harder and have more health. "
-                "Consider bringing additional healing.",
-        
-        # Optional: mandatory loadout requirements
-        loadout=LoadoutConfig(
-            # Normal mode requirements (None if no special requirements)
-            normal_mode=None,
-            
-            # Hard mode requirements
-            hard_mode=MandatoryLoadout(
-                # Player build requirements
-                player_build=PlayerBuildRequirement(
-                    # Build codes by profession (use "Any" key for universal builds)
-                    builds={
-                        "Warrior": "OQcAQ8hTIxsDAAAAAAAAAA",  # Example build code
-                        "Any": "OAhAAAAAAAAAAAAAAAAAAA"       # Fallback for other professions
-                    },
-                    expected_skills=8,
-                    equipment="Sentinel's Insignia recommended",
-                    weapons={
-                        "Set 1": "Sword/Shield with +armor",
-                        "Set 2": "Longbow for pulling"
-                    }
-                ),
-                
-                # Required heroes
-                required_heroes=[
-                    # Fixed hero requirement (specific hero required)
-                    HeroRequirement(
-                        hero_id=HeroType.Koss.value,
-                        build="OQcAQ8hTIxsDAAAAAAAAAA",
-                        expected_skills=8,
-                        equipment="Survivor Insignia",
-                        weapons="Hammer"
-                    ),
-                    
-                    # Flexible hero requirement (user picks hero matching role)
-                    HeroRequirement(
-                        hero_id=0,  # 0 = flexible, user selects
-                        role="Healer",
-                        build="OAhAAAAAAAAAAAAAAAAAAA",
-                        expected_skills=8
-                    ),
-                    
-                    # Another flexible slot
-                    HeroRequirement(
-                        hero_id=0,
-                        role="Protection Monk",
-                        build="OAhAAAAAAAAAAAAAAAAAAA"
-                    )
-                ],
-                
-                # General notes for the player
-                notes="Do NOT bring Minion Masters - corpses are needed for quest objectives."
-            )
-        )
+        name="Mission Example",
+        description="A demo mission to test the Progress Window UI.",
+        task_type=TaskType.MISSION
     )
-    
-    # Mission-specific data
-    WAYPOINTS = [
-        (1000, 2000),
-        (1500, 2500),
-        (2000, 3000)
-    ]
-    
-    MISSION_NPC_ID = 12345  # Example NPC ID
-    
-    def pre_run_check(self, bot) -> tuple:
-        """
-        Verify preconditions before starting the mission.
-        """
-        # Example: Check if player has required quest
-        # if not has_quest(self.INFO.requires_quest_id):
-        #     return (False, "Required quest not active")
-        
-        return (True, "")
-    
+
     def execute(self, bot):
-        """
-        Main mission execution logic.
+        # 1. Setup Objectives for the UI
+        self.update_status("Initializing Mission Example...")
+        obj_move = self.add_objective("Travel to Statue", total=1)
+        obj_enemies = self.add_objective("Clear Area", total=3)
+        obj_boss = self.add_objective("Defeat Boss", total=1)
+
+        # 2. Step 1: Movement
+        self.set_active_objective("Travel to Statue")
+        self.update_status("Moving to waypoint...")
         
-        Args:
-            bot: The bot instance with access to all systems
-        """
-        # 1. Travel to mission outpost
-        yield from bot.transition.travel_to(self.INFO.start_map_id)
+        # Fixed: Passed x, y as separate args, not a tuple
+        yield from bot.movement.move_to(1000, 2000) 
         
-        # 2. Setup team and enter mission
-        yield from bot.transition.setup_mission(bot, self.use_hard_mode)
+        # Mark Step 1 Complete
+        self.complete_objective("Travel to Statue")
+
+        # 3. Step 2: Combat Simulation
+        self.set_active_objective("Clear Area")
+        self.update_status("Fighting enemies...")
         
-        # 3. Talk to NPC to enter mission (if applicable)
-        # yield from bot.transition.move_to_and_interact(bot, self.MISSION_NPC_ID)
-        # yield from bot.transition.enter_mission(bot)
+        for i in range(3):
+            bot.sleep(1000) # Simulate fighting time
+            obj_enemies.current_count += 1
+            yield
+
+        self.complete_objective("Clear Area")
+
+        # 4. Step 3: Boss
+        self.set_active_objective("Defeat Boss")
+        self.update_status("Boss fight in progress!")
         
-        # 4. Execute mission waypoints
-        for x, y in self.WAYPOINTS:
-            yield from bot.movement.move_to(x, y)
-            
-            # Optional: Combat handling
-            # if bot.combat.in_combat():
-            #     yield from bot.combat.fight()
+        yield from bot.combat.kill_target(target_id=123) # Fake ID for demo
         
-        # 5. Mark as complete
-        self.finished = True
-
-
-# ==================
-# MINIMAL EXAMPLE
-# ==================
-
-class Mission_Minimal(BaseTask):
-    """
-    Minimal mission example - just the essentials.
-    """
-    
-    INFO = TaskInfo(
-        name="Minimal Example",
-        description="A bare-bones mission template.",
-        task_type=TaskType.MISSION,
-        start_map_id=148
-    )
-    
-    def execute(self, bot):
-        yield from bot.transition.travel_to(self.INFO.start_map_id)
-        yield from bot.transition.setup_mission(bot, self.use_hard_mode)
-        # ... mission logic here
-        self.finished = True
-
-
-# ==================
-# QUEST EXAMPLE
-# ==================
-
-class Quest_Example(BaseTask):
-    """
-    Example quest - quests don't have HM/NM modes.
-    """
-    
-    INFO = TaskInfo(
-        name="Example Quest",
-        description="Template for creating quests.",
-        task_type=TaskType.QUEST,
-        start_map_id=148,
-        requires_quest_id=100  # Quest ID that must be active
-    )
-    
-    QUEST_GIVER_ID = 54321
-    
-    def execute(self, bot):
-        yield from bot.transition.travel_to(self.INFO.start_map_id)
-        yield from bot.movement.move_to(1000, 2000)
-        # ... quest logic
+        self.complete_objective("Defeat Boss")
+        self.update_status("Mission Complete!")
         self.finished = True

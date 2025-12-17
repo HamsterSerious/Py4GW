@@ -1,7 +1,8 @@
 """
 Movement System - Handles pathfinding and movement control.
 """
-from Py4GWCoreLib import Routines, Player
+from Py4GWCoreLib import Routines, Player, Utils
+from Py4GWCoreLib.GlobalCache import GLOBAL_CACHE
 
 from data.timing import Timing
 
@@ -9,8 +10,6 @@ from data.timing import Timing
 class Movement:
     """
     Handles character movement and pathfinding.
-    
-    Uses Py4GWCoreLib's FollowXY and PathHandler for movement.
     """
     
     def __init__(self):
@@ -18,16 +17,7 @@ class Movement:
         self.path_handler = None
     
     def move_to(self, x: float, y: float, tolerance: int = 100):
-        """
-        Moves to a specific coordinate.
-        
-        Args:
-            x: Target X coordinate
-            y: Target Y coordinate
-            tolerance: Distance threshold to consider "arrived"
-            
-        Yields for coroutine execution.
-        """
+        """Moves to a specific coordinate."""
         self.follow_handler.tolerance = tolerance
         self.follow_handler.move_to_waypoint(x, y)
         
@@ -35,15 +25,41 @@ class Movement:
             self.follow_handler.update()
             yield
     
-    def follow_path(self, path_coords: list):
+    def move_to_target(self, agent_id: int, range: int = 200):
         """
-        Follows a list of coordinates.
+        Moves until within specific range of an agent.
+        Does not interact, just approaches.
+        """
+        if not GLOBAL_CACHE.Agent.IsValid(agent_id):
+            return
+
+        Player.ChangeTarget(agent_id)
         
-        Args:
-            path_coords: List of (x, y) tuples
+        # Initial Move
+        target_x, target_y = GLOBAL_CACHE.Agent.GetXY(agent_id)
+        Player.Move(target_x, target_y)
+        
+        while True:
+            if not GLOBAL_CACHE.Agent.IsValid(agent_id):
+                break
             
-        Yields for coroutine execution.
-        """
+            # Use Utils.Distance instead of Player.GetDistanceFromAgent (which likely doesn't exist)
+            my_x, my_y = Player.GetXY()
+            target_x, target_y = GLOBAL_CACHE.Agent.GetXY(agent_id)
+            dist = Utils.Distance((my_x, my_y), (target_x, target_y))
+            
+            if dist < range:
+                break
+            
+            # Re-issue move command if stopped but not there yet
+            # Or if target has moved significantly? For now, we rely on stopping.
+            if not Player.IsMoving():
+                 Player.Move(target_x, target_y)
+                 
+            yield
+
+    def follow_path(self, path_coords: list):
+        """Follows a list of coordinates."""
         self.path_handler = Routines.Movement.PathHandler(path_coords)
         self.follow_handler.reset()
         
@@ -63,13 +79,10 @@ class Movement:
     # ==================
     
     def MoveTo(self, x: float, y: float, tolerance: int = 100):
-        """Legacy method name - use move_to() instead."""
         yield from self.move_to(x, y, tolerance)
     
     def FollowPath(self, path_coords: list):
-        """Legacy method name - use follow_path() instead."""
         yield from self.follow_path(path_coords)
     
     def Stop(self):
-        """Legacy method name - use stop() instead."""
         self.stop()

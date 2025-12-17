@@ -106,3 +106,21 @@
 2025-12-17 12:42:08 [INFO] ############ StoCMgr initialization completed ############
 2025-12-17 12:42:22 [INFO] ############ StoCMgr initialization completed ############
 2025-12-17 12:42:26 [INFO] Terminating DLL...
+2025-12-17 13:45:32 [INFO] ############ StoCMgr initialization completed ############
+2025-12-17 13:51:21 [INFO] ############ StoCMgr initialization completed ############
+2025-12-17 13:58:45 [INFO] ############ StoCMgr initialization completed ############
+2025-12-17 14:05:18 [INFO] ############ StoCMgr initialization completed ############
+2025-12-17 14:05:24 [INFO] Terminating DLL...
+2025-12-17 14:06:09 [INFO] ############ StoCMgr initialization completed ############
+2025-12-17 15:40:57 [INFO] ############ StoCMgr initialization completed ############
+2025-12-17 15:57:40 [INFO] ############ StoCMgr initialization completed ############
+2025-12-17 16:00:37 [INFO] ############ StoCMgr initialization completed ############
+2025-12-17 17:12:21 [INFO] ############ StoCMgr initialization completed ############
+2025-12-17 17:17:43 [INFO] ############ StoCMgr initialization completed ############
+2025-12-17 19:36:25 [INFO] ############ StoCMgr initialization completed ############
+2025-12-17 19:53:34 [INFO] ############ StoCMgr initialization completed ############
+2025-12-17 20:02:56 [INFO] ############ StoCMgr initialization completed ############
+2025-12-17 21:05:01 [INFO] Terminating DLL...
+2025-12-17 21:35:37 [INFO] ############ StoCMgr initialization completed ############
+2025-12-17 22:59:42 [INFO] Terminating DLL...
+2025-12-17 23:18:44 [INFO] ############ StoCMgr initialization completed ############

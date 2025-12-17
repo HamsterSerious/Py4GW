@@ -152,6 +152,10 @@ class TeamManager:
         """Saves configuration and refreshes UI."""
         if self.config.save():
             self._refresh_hero_list()
+            
+            # --- FIX: Explicitly update the UI with the new names ---
+            if self._ui:
+                self._ui.refresh_hero_options(self._hero_options)
     
     # ==================
     # TEAM LOADING

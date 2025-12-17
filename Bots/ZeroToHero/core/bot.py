@@ -14,10 +14,12 @@ from systems.team.manager import TeamManager
 from systems.movement import Movement
 from systems.combat import Combat
 from systems.transition import Transition
+from systems.interaction import Interaction
 from ui.dashboard import DashboardUI
 from ui.notification_window import NotificationWindow
 from ui.queue_window import QueueWindow
 from ui.task_info_window import TaskInfoWindow
+from ui.progress_window import ProgressWindow
 
 
 class ZeroToHeroBot(BottingClass):
@@ -36,7 +38,8 @@ class ZeroToHeroBot(BottingClass):
         self.task_registry = TaskRegistry()
         self.movement = Movement()
         self.combat = Combat()
-        self.transition = Transition()
+        self.transition = Transition(self)
+        self.interaction = Interaction(self)
         
         # Team Management
         self.team_manager = TeamManager(self)
@@ -53,6 +56,7 @@ class ZeroToHeroBot(BottingClass):
         self.notification_window = NotificationWindow(self)
         self.queue_window = QueueWindow(self)
         self.task_info_window = TaskInfoWindow(self)
+        self.progress_window = ProgressWindow(self)
         
         # Bot State
         self.is_running = False
@@ -257,6 +261,7 @@ class ZeroToHeroBot(BottingClass):
         self.task_info_window.draw()
         self.team_manager.draw_window()
         self.notification_window.draw()
+        self.progress_window.draw()
     
     # ==================
     # LEGACY COMPATIBILITY

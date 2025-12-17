@@ -17,7 +17,7 @@ class Timing:
     # Party Management
     PARTY_DISBAND_WAIT = 500        # Wait after kicking heroes
     HERO_ADD_DELAY = 300            # Wait after adding a hero
-    HERO_APPEAR_TIMEOUT = 3.0       # Seconds to wait for hero to appear (float for time.time())
+    HERO_APPEAR_TIMEOUT = 3.0       # Seconds to wait for hero to appear
     
     # Skill/Build Loading
     SKILL_TEMPLATE_LOAD = 200       # Wait after loading a skill template
@@ -29,7 +29,7 @@ class Timing:
     
     # NPC Interaction
     MOVEMENT_POLL = 100             # Polling interval while moving
-    INTERACT_DELAY = 1000           # Wait after interacting with NPC
+    INTERACT_DELAY = 250            # Wait after interacting with NPC (Reduced from 1000)
     MISSION_LOAD_INITIAL = 2000     # Initial wait for mission load
     
     # Combat
@@ -45,9 +45,6 @@ class Timing:
 class Range:
     """
     Combat/interaction ranges.
-    
-    Note: Py4GWCoreLib.enums_src.GameData_enums.Range has the official values.
-    These are bot-specific defaults that may differ from strict game definitions.
     """
     COMBAT_DEFAULT = 900            # Default engagement range
     MELEE = 144                     # Touch/melee range

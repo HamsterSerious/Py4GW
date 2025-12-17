@@ -6,6 +6,7 @@ import Py4GW
 
 from core.constants import BOT_NAME, Colors, TASK_INFO_WINDOW_SIZE
 from data.enums import TaskType, GameMode
+from data.heroes import get_hero_display_name
 from models.requirements import TaskRequirementsAccessor, LoadoutRequirements
 from ui.base_window import ClosableWindow
 
@@ -133,24 +134,31 @@ class TaskInfoWindow(ClosableWindow):
         for h in heroes:
             PyImGui.bullet()
             if h.hero_id > 0:
-                hero_label = f"Hero {h.hero_id}"
+                hero_name = get_hero_display_name(h.hero_id)
+                hero_label = f"{hero_name}"
             else:
                 hero_label = h.role or "Strategy Hero"
             self._draw_clickable_build(h.build, hero_label)
     
     def _draw_clickable_build(self, build_code: str, label: str):
         """Draw a build code that can be clicked to copy."""
+        # Case 1: "Any" or empty - Draw colored text but NO copy interaction
         if not build_code or build_code == "Any":
-            PyImGui.text(f"{label}: Any")
+            # Using Colors.BUILD_CODE ensures it looks consistent with other entries
+            PyImGui.text_colored(f"{label}: Any", Colors.BUILD_CODE)
             return
         
+        # Case 2: Actual Build Code - Draw colored + Clickable
         PyImGui.text_colored(f"{label}: {build_code}", Colors.BUILD_CODE)
+        
+        # Interaction Logic
         if PyImGui.is_item_hovered():
             PyImGui.set_tooltip("Click to Copy Build Code")
+            
         if PyImGui.is_item_clicked(0):
             PyImGui.set_clipboard_text(build_code)
             Py4GW.Console.Log(
                 BOT_NAME, 
-                "Build code copied to clipboard.", 
+                f"Build code for {label} copied to clipboard.", 
                 Py4GW.Console.MessageType.Info
             )

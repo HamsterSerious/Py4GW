@@ -302,9 +302,13 @@ class TaskRegistry:
         """Remove a task from the queue by index."""
         if 0 <= index < len(self.task_queue):
             removed = self.task_queue.pop(index)
+            
+            # Format mode string if applicable
+            mode_str = f" [{removed.mode_string}]" if removed.task_type == TaskType.MISSION else ""
+            
             Py4GW.Console.Log(
                 "TaskRegistry", 
-                f"Removed from queue: {removed.name}", 
+                f"Removed from queue: {removed.name}{mode_str}", 
                 Py4GW.Console.MessageType.Info
             )
 
@@ -313,9 +317,14 @@ class TaskRegistry:
         if 0 < index < len(self.task_queue):
             self.task_queue[index], self.task_queue[index - 1] = \
                 self.task_queue[index - 1], self.task_queue[index]
+            
+            # Get the task that moved up (it's now at index-1)
+            moved_task = self.task_queue[index - 1]
+            mode_str = f" [{moved_task.mode_string}]" if moved_task.task_type == TaskType.MISSION else ""
+            
             Py4GW.Console.Log(
                 "TaskRegistry", 
-                f"Moved '{self.task_queue[index-1].name}' up.", 
+                f"Moved '{moved_task.name}'{mode_str} up.", 
                 Py4GW.Console.MessageType.Info
             )
 
@@ -324,8 +333,13 @@ class TaskRegistry:
         if 0 <= index < len(self.task_queue) - 1:
             self.task_queue[index], self.task_queue[index + 1] = \
                 self.task_queue[index + 1], self.task_queue[index]
+            
+            # Get the task that moved down (it's now at index+1)
+            moved_task = self.task_queue[index + 1]
+            mode_str = f" [{moved_task.mode_string}]" if moved_task.task_type == TaskType.MISSION else ""
+            
             Py4GW.Console.Log(
                 "TaskRegistry", 
-                f"Moved '{self.task_queue[index+1].name}' down.", 
+                f"Moved '{moved_task.name}'{mode_str} down.", 
                 Py4GW.Console.MessageType.Info
             )

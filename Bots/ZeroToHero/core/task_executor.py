@@ -4,6 +4,7 @@ Task Executor - Handles task execution lifecycle.
 Extracted from bot.py to reduce its responsibilities.
 """
 import Py4GW
+from Py4GWCoreLib import Player  # Added for CancelMove
 
 from core.constants import BOT_NAME
 from data.enums import TaskType, GameMode
@@ -48,8 +49,13 @@ class TaskExecutor:
         Returns:
             True if execution should continue, False if queue finished
         """
-        if not self.bot.is_running or self.bot.is_paused:
+        # We allow update() to run even when paused to monitor state,
+        # but we prevent starting NEW tasks.
+        if not self.bot.is_running:
             return True
+            
+        if self.bot.is_paused:
+            return True # Just wait, don't start new tasks
         
         # Get next task if none active
         if not self.current_task:
@@ -106,8 +112,49 @@ class TaskExecutor:
             self.current_task = None
             return
         
-        # Start execution coroutine
-        self.bot.config.FSM.AddManagedCoroutine("MainTask", task.execute(self.bot))
+        # Start execution coroutine WITH PAUSE WRAPPER
+        self.bot.config.FSM.AddManagedCoroutine(
+            "MainTask", 
+            self._execute_with_pause_logic(task)
+        )
+
+    def _execute_with_pause_logic(self, task):
+        """
+        Generator wrapper that injects pause handling into any task.
+        """
+        # Get the original task generator
+        task_generator = task.execute(self.bot)
+        was_paused = False
+        
+        try:
+            while True:
+                # --- PAUSE LOGIC ---
+                if self.bot.is_paused:
+                    if not was_paused:
+                        # Just entered pause state: Stop character immediately
+                        Player.CancelMove()
+                        was_paused = True
+                        # Optional: Log to console if desired, but button feedback is usually enough
+                    
+                    yield # Yield control back to engine without advancing task
+                    continue
+                
+                # Reset state if we just unpaused
+                if was_paused:
+                    was_paused = False
+                
+                # --- EXECUTE TASK STEP ---
+                # Advance the actual task by one step
+                yield next(task_generator)
+                
+        except StopIteration:
+            # Task finished naturally
+            pass
+        except Exception as e:
+            # Task crashed
+            Py4GW.Console.Log(BOT_NAME, f"Task Exception: {e}", Py4GW.Console.MessageType.Error)
+            task.failed = True
+            raise e
     
     def _on_task_finished(self):
         """Handle task completion."""

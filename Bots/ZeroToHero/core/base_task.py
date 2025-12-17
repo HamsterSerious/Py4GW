@@ -5,11 +5,15 @@ Provides:
 - Task metadata via INFO class attribute
 - Execution lifecycle (started, finished, failed)
 - Pre-run checks
+- Mission Progress Tracking
 """
-from typing import Generator, Tuple
+from typing import Generator, Tuple, List
+import Py4GW
 
+from core.constants import BOT_NAME
 from data.enums import TaskType, GameMode
 from models.task import TaskInfo
+from models.progress import TaskObjective
 
 
 class BaseTask:
@@ -23,16 +27,12 @@ class BaseTask:
     
     Example:
         class MyMission(BaseTask):
-            INFO = TaskInfo(
-                name="My Mission",
-                description="Does something cool",
-                task_type=TaskType.MISSION,
-                start_map_id=123
-            )
+            INFO = TaskInfo(...)
             
             def execute(self, bot):
-                yield from bot.transition.travel_to(123)
-                # ... mission logic
+                obj = self.add_objective("Go to X")
+                yield from bot.movement.move_to(X)
+                self.complete_objective("Go to X")
                 self.finished = True
     """
     
@@ -51,6 +51,10 @@ class BaseTask:
         
         # Mode configuration (set by QueuedTask.create_instance)
         self.use_hard_mode = False
+
+        # Progress Tracking
+        self.objectives: List[TaskObjective] = []
+        self.status_message: str = "Initializing..."
     
     # ==================
     # PROPERTIES
@@ -117,13 +121,69 @@ class BaseTask:
             
         Yields:
             Control back to the bot loop
-            
-        Example:
-            def execute(self, bot):
-                yield from bot.transition.travel_to(self.INFO.start_map_id)
-                yield from bot.movement.move_to(1000, 2000)
-                self.finished = True
         """
         # Default implementation - override in subclasses
         self.finished = True
         yield
+
+    # ==================
+    # PROGRESS HELPERS
+    # ==================
+
+    def add_objective(self, name: str, total: int = 1) -> TaskObjective:
+        """
+        Adds a new objective to the tracker.
+        
+        Args:
+            name: Display name of objective
+            total: Total count required (default 1)
+            
+        Returns:
+            The created TaskObjective instance
+        """
+        obj = TaskObjective(name=name, total_count=total)
+        self.objectives.append(obj)
+        return obj
+
+    def update_status(self, message: str):
+        """Updates the global status message shown at the top of the progress window."""
+        # Prevent log spam by checking if the message is new
+        if self.status_message == message:
+            return
+
+        self.status_message = message
+        Py4GW.Console.Log(
+            BOT_NAME, 
+            f"Status Update: {message}", 
+            Py4GW.Console.MessageType.Info
+        )
+
+    def complete_objective(self, name: str):
+        """
+        Marks an objective as complete by name.
+        Also handles setting current_count to total_count.
+        """
+        for obj in self.objectives:
+            if obj.name == name:
+                obj.is_completed = True
+                obj.current_count = obj.total_count
+                obj.is_active = False
+                
+                Py4GW.Console.Log(
+                    BOT_NAME, 
+                    f"Objective Completed: {name}", 
+                    Py4GW.Console.MessageType.Info
+                )
+
+    def set_active_objective(self, name: str):
+        """Highlights a specific objective as active (orange arrow)."""
+        for obj in self.objectives:
+            is_new_active = (obj.name == name and not obj.is_active)
+            obj.is_active = (obj.name == name)
+            
+            if is_new_active:
+                Py4GW.Console.Log(
+                    BOT_NAME, 
+                    f"New Objective: {name}", 
+                    Py4GW.Console.MessageType.Info
+                )
