@@ -6,6 +6,7 @@ Provides:
 - Mission entry from outpost (complete sequence)
 - Mission completion waiting
 - Team setup with HM/NM handling
+- Cinematic/cutscene handling
 """
 import Py4GW
 from Py4GWCoreLib import Routines, Player
@@ -23,6 +24,7 @@ class Transition:
     Key methods for missions:
     - enter_mission_from_outpost(): Complete mission entry sequence
     - wait_for_mission_end(): Wait for mission completion
+    - wait_for_cinematic_end(): Wait for/skip cinematics
     """
     
     def __init__(self, bot):
@@ -56,6 +58,11 @@ class Transition:
     def current_map_id(self) -> int:
         """Get current map ID."""
         return GLOBAL_CACHE.Map.GetMapID()
+
+    @property
+    def is_in_cinematic(self) -> bool:
+        """Check if currently in a cinematic/cutscene."""
+        return GLOBAL_CACHE.Map.IsInCinematic()
 
     # ==================
     # HIGH-LEVEL MISSION API
@@ -186,6 +193,64 @@ class Transition:
         yield from self._wait_until_map_ready(timeout_ms=Timing.MAP_LOAD_TIMEOUT)
         
         self._log(f"Arrived at map {self.current_map_id}")
+
+    # ==================
+    # CINEMATIC HANDLING
+    # ==================
+
+    def skip_cinematic(self):
+        """Skip the current cinematic."""
+        if self.is_in_cinematic:
+            GLOBAL_CACHE.Map.SkipCinematic()
+            self._log("Skipping cinematic...")
+
+    def wait_for_cinematic_end(self, timeout_ms: int = 30000, auto_skip: bool = True):
+        """
+        Wait for a cinematic to start and then end (or skip it).
+        
+        Use this after triggering events that cause cinematics
+        (escort completion, boss kills, etc.)
+        
+        Args:
+            timeout_ms: Maximum time to wait for cinematic to start/end
+            auto_skip: If True, automatically skip the cinematic
+            
+        Yields for coroutine execution.
+        """
+        timeout = Timeout(timeout_ms)
+        
+        # Phase 1: Wait for cinematic to START (it might not have triggered yet)
+        self._log("Waiting for cinematic...")
+        cinematic_started = False
+        
+        while not timeout.expired:
+            if self.is_in_cinematic:
+                cinematic_started = True
+                self._log("Cinematic started.")
+                break
+            yield from Routines.Yield.wait(Timing.FRAME_DELAY)
+        
+        if not cinematic_started:
+            self._log("No cinematic detected.", warning=True)
+            return
+        
+        # Phase 2: Skip or wait for cinematic to END
+        if auto_skip:
+            yield from Routines.Yield.wait(500)  # Brief delay before skip
+            self.skip_cinematic()
+            yield from Routines.Yield.wait(500)  # Wait for skip to register
+        
+        # Wait for cinematic to actually end
+        while not timeout.expired and self.is_in_cinematic:
+            if auto_skip:
+                # Keep trying to skip in case first attempt didn't work
+                self.skip_cinematic()
+            yield from Routines.Yield.wait(Timing.MAP_READY_POLL)
+        
+        self._log("Cinematic ended.")
+        
+        # Small buffer for game state to settle
+        yield from Routines.Yield.wait(Timing.MEDIUM_DELAY)
 
     # ==================
     # CORE TRAVEL METHODS

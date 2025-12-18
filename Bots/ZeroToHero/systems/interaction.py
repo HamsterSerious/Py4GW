@@ -353,11 +353,12 @@ class Interaction:
         """
         Drops the currently held bundle.
         
+        Uses the keybind method which properly simulates the drop action.
+        
         Yields for coroutine execution.
         """
         if self.is_holding_bundle():
-            # Drop by clicking on ground or using drop command
-            Player.DropBundle()
+            yield from Routines.Yield.Keybinds.DropBundle()
             yield from Routines.Yield.wait(Timing.SHORT_DELAY)
 
     # ==================

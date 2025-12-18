@@ -4,14 +4,20 @@ Campaign: Nightfall
 
 Investigate the ruins of Fahranur, The First City with Kormir to find what is killing the workers.
 This is the second mission in the Nightfall campaign.
+
+Trials:
+1. Kill Darehk the Quick
+2. Retrieve Stone Tablets (avoid Ghostly Sunspears)
+3. Escort Kadash
+4. Kill Apocryphia
 """
 from core.base_task import BaseTask
 from models.task import TaskInfo
 from models.loadout import LoadoutConfig, MandatoryLoadout, HeroRequirement
 from data.enums import TaskType
-from data.timing import Timing
+from data.timing import Timing, Range
 from Py4GWCoreLib.GlobalCache import GLOBAL_CACHE
-from Py4GWCoreLib import Routines
+from Py4GWCoreLib import Routines, Player, Utils
 from Py4GWCoreLib.enums_src.Hero_enums import HeroType
 
 
@@ -20,7 +26,7 @@ class MissionJokanur(BaseTask):
     
     INFO = TaskInfo(
         name="Jokanur Diggings",
-        description="Investigate the ruins of Fahranur, The First City with Kormir to find what is killing the workers.",
+        description="Investigate the ruins of Fahranur with Kormir to find what is killing the workers.",
         task_type=TaskType.MISSION,
         loadout=LoadoutConfig(
             normal_mode=MandatoryLoadout(
@@ -43,9 +49,9 @@ class MissionJokanur(BaseTask):
     # ==================
     
     # Map IDs
-    MAP_ID_OUTPOST = 491              # Jokanur Diggings (outpost)
-    MAP_ID_MISSION = 491              # Same ID, differentiated by IsOutpost
-    MAP_ID_COMPLETION = 449           # Kamadan (after completion)
+    MAP_ID_OUTPOST = 491
+    MAP_ID_MISSION = 491  # Same as outpost - use IsOutpost/IsExplorable to differentiate
+    MAP_ID_COMPLETION = 449  # Kamadan
     
     # NPCs
     NPC_GATAH_MODEL = 4712
@@ -53,29 +59,36 @@ class MissionJokanur(BaseTask):
     NPC_GATAH_APPROACH = (2171.93, -184.73)  # Walk here first if NPC not visible
     DIALOG_START = 0x84
     
-    # Bosses / Targets
-    BOSS_DAREHK_MODEL = 5545          # Darehk the Quick (Trial 1) - NOTE: Same as Ghostly Sunspear!
-    BOSS_APOCRYPHIA_MODEL = 4335      # Final boss
+    # Trial 1 - Darehk the Quick
+    BOSS_DAREHK_MODEL = 5545  # NOTE: Same ModelID as Ghostly Sunspear!
     
-    # NPCs to escort
-    NPC_KADASH_MODEL = 5546           # Escort target (Trial 3)
+    # Trial 2 - Stone Tablets
+    ITEM_STONE_TABLET = 17055
+    GADGET_PEDESTAL_1 = 6472  # After Trial 1
+    GADGET_PEDESTAL_2 = 6475  # Trial 2 - first pedestal
+    GADGET_PEDESTAL_3 = 6474  # Trial 2 - second pedestal
     
-    # Items
-    ITEM_STONE_TABLET = 17055         # Dropped by Darehk, used on pedestals
+    # Ghostly Sunspear (same ModelID as Darehk - avoid attacking these!)
+    ENEMY_GHOSTLY_SUNSPEAR = 5545
+    PACIFIST_TRIGGER_RANGE = 1500
     
-    # Gadgets (Stone Pedestals)
-    GADGET_PEDESTAL_1 = 6472          # After Trial 1
-    GADGET_PEDESTAL_2 = 6475          # Trial 2 - first pedestal
-    GADGET_PEDESTAL_3 = 6474          # Trial 2 - second pedestal
+    # Trial 3 - Escort Kadash
+    NPC_KADASH_MODEL = 5546
+    ESCORT_MAX_DISTANCE = 500
     
-    # Enemies to ignore (for Trial 2)
-    ENEMY_GHOSTLY_SUNSPEAR = 5545     # Don't kill these during tablet retrieval
+    # Final Boss
+    BOSS_APOCRYPHIA_MODEL = 4335
+    
+    # Hero Behavior Constants
+    HERO_FIGHT = 0
+    HERO_GUARD = 1
+    HERO_AVOID = 2
     
     # ==================
     # PATHS
     # ==================
     
-    # Path to the Ancient Istani Ruins (before first gate)
+    # Path to Ancient Istani Ruins (before first gate)
     PATH_TO_RUINS = [
         (15590.30, 13267.24),
         (12465.50, 13480.69),
@@ -86,42 +99,49 @@ class MissionJokanur(BaseTask):
         (2793.44, 16898.92),
     ]
     
-    # Gate position and waypoint after gate (for progress checking)
+    # Gate position
     GATE_POSITION = (-155.00, 14430.16)
     AFTER_GATE_POSITION = (-1505.30, 14471.92)
     
-    # Path to engage Darehk the Quick (Trial 1)
+    # Path to engage Darehk
     PATH_TO_DAREHK = [
         (-1505.30, 14471.92),
     ]
+    DAREHK_ENGAGE_RANGE = 3000  # Extended range for this boss
     
-    # Position of first Stone Pedestal (after killing Darehk)
+    # Pedestal 1 position
     PEDESTAL_1_POSITION = (-5934.00, 11249.00)
     
     # Trial 2 paths
     PATH_TRIAL2_START = [
         (-9297.15, 11574.76),
     ]
-    HERO_FLAG_POSITION_1 = (-9826.88, 7815.42)
-    TABLET1_DROP_POSITION = (-11461.18, 6657.43)
     
-    PATH_TRIAL2_TABLET2_APPROACH = [
+    # Tablet 1: Pick up, carry to drop position
+    TABLET1_SEARCH_POS = (-9297.15, 11574.76)
+    TABLET1_DROP_POS = (-11461.18, 6657.43)
+    
+    # Tablet 2: Pick up from different area
+    PATH_TO_TABLET2 = [
         (-12266.74, 9621.60),
         (-12411.94, 11786.64),
     ]
-    HERO_FLAG_POSITION_2 = (-12411.94, 11786.64)
+    TABLET2_SEARCH_POS = (-12411.94, 11786.64)
     
+    # Return path with tablet 2
     PATH_TRIAL2_RETURN = [
         (-12266.74, 9621.60),
         (-11965.52, 6699.59),
     ]
+    PEDESTAL_2_POSITION = (-11965.52, 6699.59)  # GadgetID 6475
+    PEDESTAL_3_POSITION = (-11965.52, 6699.59)  # GadgetID 6474 (same area)
     
-    # Trial 3 - Escort Kadash
+    # Trial 3 - Escort path
     PATH_TO_KADASH = [
         (-11736.30, 4717.63),
         (-10536.60, 3467.35),
     ]
-    KADASH_START_POSITION = (-10251.00, 1900.00)
+    KADASH_START_POS = (-10251.00, 1900.00)
     
     PATH_ESCORT_KADASH = [
         (-13053.12, -25.67),
@@ -138,16 +158,6 @@ class MissionJokanur(BaseTask):
         (-3039.00, -1701.00),
     ]
     APOCRYPHIA_POSITION = (-3039.00, -1701.00)
-    
-    # ==================
-    # TIMING OVERRIDES
-    # ==================
-    
-    GATE_STUCK_TIMEOUT = 3.0          # Seconds without progress = blocked
-    GATE_RETRY_DELAY = 5.0            # Seconds to wait before retry
-    DAREHK_ENGAGE_RANGE = 3000        # Extended range to engage Darehk
-    LOOT_PICKUP_TIMEOUT = 5000        # Timeout for item pickup
-    CLEAR_AREA_RADIUS = 2000          # Radius to clear enemies before pickup
 
     # ==================
     # MAIN EXECUTION
@@ -164,10 +174,6 @@ class MissionJokanur(BaseTask):
             obj_trial2 = self.add_objective("Trial 2: Retrieve Stone Tablets", total=2)
             obj_trial3 = self.add_objective("Trial 3: Escort Kadash")
             obj_boss = self.add_objective("Defeat Apocryphia")
-            
-            # === SETUP LOOT WHITELIST ===
-            # Whitelist Stone Tablet so we can pick it up (non-yielding call)
-            bot.items.add_to_whitelist(self.ITEM_STONE_TABLET)
             
             # === ENTER MISSION ===
             success = yield from bot.transition.enter_mission_from_outpost(
@@ -191,16 +197,13 @@ class MissionJokanur(BaseTask):
             
             yield from bot.combat.move_and_clear_path(self.PATH_TO_RUINS)
             
-            # Move to gate and wait for it to open
-            self.update_status("Approaching gate...")
-            yield from bot.movement.move_to(self.GATE_POSITION[0], self.GATE_POSITION[1])
-            
+            # Wait at gate
             self.update_status("Waiting for gate to open...")
             gate_success = yield from bot.movement.move_with_gate_check(
                 self.AFTER_GATE_POSITION[0],
                 self.AFTER_GATE_POSITION[1],
-                stuck_timeout_sec=self.GATE_STUCK_TIMEOUT,
-                retry_delay_sec=self.GATE_RETRY_DELAY,
+                stuck_timeout_sec=3.0,
+                retry_delay_sec=5.0,
                 status_callback=lambda msg: self.update_status(msg)
             )
             
@@ -215,149 +218,106 @@ class MissionJokanur(BaseTask):
             self.set_active_objective("Trial 1: Defeat Darehk the Quick")
             self.update_status("Hunting Darehk the Quick...")
             
-            # hunt_target_along_path now correctly finds ENEMIES only
-            # This distinguishes Darehk (enemy, ModelID 5545) from Gatah (ally, same ModelID)
             killed = yield from bot.combat.hunt_target_along_path(
                 path=self.PATH_TO_DAREHK,
                 target_model_id=self.BOSS_DAREHK_MODEL,
                 engage_range=self.DAREHK_ENGAGE_RANGE,
             )
             
-            # === SAVE OUR POSITION - we were in fighting range when he died ===
-            from Py4GWCoreLib import Player
-            import Py4GW
-            fight_position = Player.GetXY()
-            Py4GW.Console.Log("ZeroToHero", f"Darehk fight position saved: ({fight_position[0]:.0f}, {fight_position[1]:.0f})", Py4GW.Console.MessageType.Info)
-            
             if not killed:
                 self.update_status("Warning: Darehk not confirmed dead - searching area...")
-                yield from bot.combat.kill_all(radius=self.CLEAR_AREA_RADIUS)
-                
-                # Double check using enemy-specific method
-                if not bot.combat.is_enemy_dead(self.BOSS_DAREHK_MODEL):
-                    self.update_status("ERROR: Darehk still alive!")
-                    self.failed = True
-                    return
+                yield from bot.combat.kill_all(radius=2500)
             
-            self.update_status("Darehk defeated!")
+            self.update_status("Darehk defeated! Picking up Stone Tablet...")
             
-            # === Clear enemies, then return to fight position to pick up tablet ===
-            self.update_status("Clearing remaining enemies...")
-            yield from bot.combat.kill_all(radius=1500)  # Clear nearby first
+            # Wait for item drop
+            yield from Routines.Yield.wait(2000)
             
-            # Return to where we were when Darehk died (tablet should be nearby)
-            self.update_status(f"Returning to fight area ({fight_position[0]:.0f}, {fight_position[1]:.0f})...")
-            yield from bot.combat.move_and_clear_path([fight_position])
-            
-            # Wait for item to drop
-            self.update_status("Waiting for Stone Tablet to drop...")
-            yield from Routines.Yield.wait(2000)  # Longer wait for drop animation
-            
-            # Pick up Stone Tablet with larger search range (default is ~1012)
-            self.update_status("Picking up Stone Tablet...")
-            yield from bot.items.pickup_items(
-                pickup_timeout_ms=self.LOOT_PICKUP_TIMEOUT,
-                max_distance=2500  # Larger range to find tablet
+            # Pick up Stone Tablet
+            picked_up = yield from bot.items.pickup_item_by_model_id(
+                model_id=self.ITEM_STONE_TABLET,
+                max_range=2500,
+                timeout_ms=5000
             )
             
-            # Check if we're holding the tablet
-            if bot.interaction.is_holding_bundle():
-                self.update_status("Stone Tablet acquired!")
-            else:
-                self.update_status("Warning: Could not confirm Stone Tablet pickup - continuing anyway...")
+            if not picked_up and not bot.interaction.is_holding_bundle():
+                self.update_status("Warning: Could not pick up Stone Tablet!")
             
             # Move to and use tablet on first pedestal
             self.update_status("Moving to Stone Pedestal...")
             yield from bot.combat.move_and_clear_path([self.PEDESTAL_1_POSITION])
             
-            # Use tablet on pedestal (interact while holding bundle)
             self.update_status("Using tablet on pedestal...")
             yield from bot.interaction.use_bundle_on_gadget(self.GADGET_PEDESTAL_1)
             
             self.complete_objective("Trial 1: Defeat Darehk the Quick")
             
-            # === PHASE 3: Trial 2 - Retrieve Two Stone Tablets ===
+            # === PHASE 3: Trial 2 - Retrieve Stone Tablets (PACIFIST ZONE) ===
             self.set_active_objective("Trial 2: Retrieve Stone Tablets")
+            self.update_status("Trial 2: Entering pacifist zone...")
             
-            # Add Ghostly Sunspears to ignore list (same ModelID as Darehk!)
-            bot.combat.add_to_ignore_list(self.ENEMY_GHOSTLY_SUNSPEAR)
+            # --- TABLET 1 ---
+            # Enable pacifist mode for heroes
+            self._set_all_heroes_behavior(self.HERO_AVOID)
             
-            # --- Tablet 1 ---
-            self.update_status("Trial 2: Retrieving first tablet...")
+            # Move WITHOUT combat to tablet area
+            self.update_status("Moving to first tablet (avoiding Ghostly Sunspears)...")
+            yield from bot.movement.move_to(self.TABLET1_SEARCH_POS[0], self.TABLET1_SEARCH_POS[1])
             
-            # Move toward tablet area
-            yield from bot.combat.move_and_clear_path(self.PATH_TRIAL2_START)
-            
-            # TODO: Flag heroes to avoid them killing Ghostly Sunspears
-            # Needs: bot.hero.flag_all(self.HERO_FLAG_POSITION_1)
-            self.update_status("TODO: Flag heroes to safe position")
-            
-            # Pick up nearest Stone Tablet using whitelist method
+            # Pick up nearest tablet
             self.update_status("Picking up first tablet...")
-            yield from bot.items.pickup_items(
-                pickup_timeout_ms=self.LOOT_PICKUP_TIMEOUT,
-                max_distance=2500
+            picked_up = yield from bot.items.pickup_item_by_model_id(
+                model_id=self.ITEM_STONE_TABLET,
+                max_range=2500
             )
             
             if not bot.interaction.is_holding_bundle():
-                self.update_status("Warning: Could not pick up tablet 1")
+                self.update_status("Warning: Could not pick up tablet 1!")
             
-            # Move to drop position and drop tablet
+            # Carry to drop position
             self.update_status("Carrying tablet to drop position...")
-            yield from bot.movement.move_to(self.TABLET1_DROP_POSITION[0], self.TABLET1_DROP_POSITION[1])
+            yield from bot.movement.move_to(self.TABLET1_DROP_POS[0], self.TABLET1_DROP_POS[1])
             
             # Drop the tablet
-            self.update_status("Dropping tablet...")
             yield from bot.interaction.drop_bundle()
-            
-            # TODO: Unflag heroes
-            # Needs: bot.hero.unflag_all()
-            
             obj_trial2.current_count = 1
             
-            # --- Tablet 2 ---
-            self.update_status("Trial 2: Retrieving second tablet...")
+            # --- TABLET 2 ---
+            self.update_status("Moving to second tablet...")
+            for waypoint in self.PATH_TO_TABLET2:
+                yield from bot.movement.move_to(waypoint[0], waypoint[1])
             
-            # Move to second tablet area
-            yield from bot.combat.move_and_clear_path(self.PATH_TRIAL2_TABLET2_APPROACH)
-            
-            # TODO: Flag heroes again
-            # Needs: bot.hero.flag_all(self.HERO_FLAG_POSITION_2)
-            self.update_status("TODO: Flag heroes for tablet 2")
-            
-            # Pick up nearest Stone Tablet using whitelist method
+            # Pick up second tablet
             self.update_status("Picking up second tablet...")
-            yield from bot.items.pickup_items(
-                pickup_timeout_ms=self.LOOT_PICKUP_TIMEOUT,
-                max_distance=2500
+            picked_up = yield from bot.items.pickup_item_by_model_id(
+                model_id=self.ITEM_STONE_TABLET,
+                max_range=2500
             )
             
             if not bot.interaction.is_holding_bundle():
-                self.update_status("Warning: Could not pick up tablet 2")
+                self.update_status("Warning: Could not pick up tablet 2!")
             
             # Return with tablet
             self.update_status("Returning with tablet...")
-            yield from bot.combat.move_and_clear_path(self.PATH_TRIAL2_RETURN)
-            
-            # TODO: Unflag heroes
-            # Needs: bot.hero.unflag_all()
+            for waypoint in self.PATH_TRIAL2_RETURN:
+                yield from bot.movement.move_to(waypoint[0], waypoint[1])
             
             # Use tablet on pedestal 2
-            self.update_status("Using tablet on first pedestal...")
+            self.update_status("Using tablet on first Trial 2 pedestal...")
             yield from bot.interaction.use_bundle_on_gadget(self.GADGET_PEDESTAL_2)
             
-            # Pick up remaining tablet and use on pedestal 3
-            self.update_status("Picking up final tablet...")
-            yield from bot.items.pickup_items(
-                pickup_timeout_ms=self.LOOT_PICKUP_TIMEOUT,
-                max_distance=2500
+            # Pick up the tablet we dropped earlier and use on pedestal 3
+            self.update_status("Picking up dropped tablet...")
+            picked_up = yield from bot.items.pickup_item_by_model_id(
+                model_id=self.ITEM_STONE_TABLET,
+                max_range=2500
             )
             
-            self.update_status("Using tablet on second pedestal...")
+            self.update_status("Using tablet on second Trial 2 pedestal...")
             yield from bot.interaction.use_bundle_on_gadget(self.GADGET_PEDESTAL_3)
             
-            # Clear ignore list now that Trial 2 is done
-            bot.combat.clear_ignore_list()
+            # Re-enable combat mode for heroes
+            self._set_all_heroes_behavior(self.HERO_GUARD)
             
             obj_trial2.current_count = 2
             self.complete_objective("Trial 2: Retrieve Stone Tablets")
@@ -367,23 +327,23 @@ class MissionJokanur(BaseTask):
             self.update_status("Moving to Kadash...")
             
             yield from bot.combat.move_and_clear_path(self.PATH_TO_KADASH)
-            yield from bot.movement.move_to(self.KADASH_START_POSITION[0], self.KADASH_START_POSITION[1])
+            yield from bot.movement.move_to(self.KADASH_START_POS[0], self.KADASH_START_POS[1])
             
-            # TODO: Implement escort functionality
-            # Needs: yield from bot.movement.escort_npc(
-            #     npc_model_id=self.NPC_KADASH_MODEL,
-            #     path=self.PATH_ESCORT_KADASH,
-            #     max_distance=1000,
-            #     status_callback=lambda msg: self.update_status(msg)
-            # )
-            self.update_status("TODO: Escort Kadash along path")
-            yield from bot.combat.move_and_clear_path(self.PATH_ESCORT_KADASH)
-            yield from Routines.Yield.wait(1000)  # Placeholder
+            # Escort Kadash
+            self.update_status("Escorting Kadash...")
+            escort_success = yield from bot.movement.escort_npc(
+                npc_model_id=self.NPC_KADASH_MODEL,
+                path=self.PATH_ESCORT_KADASH,
+                max_distance=self.ESCORT_MAX_DISTANCE,
+                status_callback=lambda msg: self.update_status(msg)
+            )
             
-            # Wait for cutscene after escort completes
-            # TODO: yield from bot.transition.wait_for_cutscene()
-            self.update_status("TODO: Wait for cutscene")
-            yield from Routines.Yield.wait(2000)  # Placeholder
+            if not escort_success:
+                self.update_status("Warning: Escort may have failed!")
+            
+            # Wait for cutscene after escort
+            self.update_status("Waiting for cutscene...")
+            yield from bot.transition.wait_for_cinematic_end(timeout_ms=30000, auto_skip=True)
             
             self.complete_objective("Trial 3: Escort Kadash")
             
@@ -399,14 +359,15 @@ class MissionJokanur(BaseTask):
             if killed:
                 self.complete_objective("Defeat Apocryphia")
             else:
-                self.update_status("Warning: Apocryphia not confirmed dead")
-                # Try to verify
-                if bot.combat.is_enemy_dead(self.BOSS_APOCRYPHIA_MODEL):
-                    self.complete_objective("Defeat Apocryphia")
+                self.update_status("Warning: Apocryphia not confirmed dead - clearing area...")
+                yield from bot.combat.kill_all(radius=2500)
+                self.complete_objective("Defeat Apocryphia")
             
             # === MISSION END ===
-            # Cutscene plays, then teleport to Kamadan
-            self.update_status("Waiting for mission completion...")
+            self.update_status("Waiting for final cutscene...")
+            yield from bot.transition.wait_for_cinematic_end(timeout_ms=30000, auto_skip=True)
+            
+            # Wait for teleport to Kamadan
             yield from bot.transition.wait_for_mission_end(self.MAP_ID_MISSION)
             self.update_status("Mission Complete!")
             
@@ -418,8 +379,37 @@ class MissionJokanur(BaseTask):
             self.failed = True
             
         finally:
-            # Clean up
-            bot.combat.clear_ignore_list()
-            # Clear the whitelist to avoid picking up tablets in other missions
-            bot.items.clear_whitelist()
+            # Ensure heroes are back to normal behavior
+            self._set_all_heroes_behavior(self.HERO_GUARD)
             self.finished = True
+
+    # ==================
+    # HELPER METHODS
+    # ==================
+    
+    def _set_all_heroes_behavior(self, behavior: int):
+        """
+        Set behavior for all heroes in party.
+        
+        Args:
+            behavior: 0=Fight, 1=Guard, 2=Avoid
+        """
+        try:
+            heroes = GLOBAL_CACHE.Party.GetHeroes()
+            for hero in heroes:
+                GLOBAL_CACHE.Party.Heroes.SetHeroBehavior(hero.agent_id, behavior)
+            
+            behavior_names = {0: "Fight", 1: "Guard", 2: "Avoid"}
+            import Py4GW
+            Py4GW.Console.Log(
+                "MissionJokanur",
+                f"Set all heroes to {behavior_names.get(behavior, behavior)} mode",
+                Py4GW.Console.MessageType.Info
+            )
+        except Exception as e:
+            import Py4GW
+            Py4GW.Console.Log(
+                "MissionJokanur",
+                f"Error setting hero behavior: {e}",
+                Py4GW.Console.MessageType.Warning
+            )

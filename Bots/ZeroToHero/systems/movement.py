@@ -239,6 +239,137 @@ class Movement:
         return success
 
     # ==================
+    # ESCORT HANDLING
+    # ==================
+
+    def escort_npc(
+        self,
+        npc_model_id: int,
+        path: list,
+        max_distance: int = 500,
+        status_callback=None
+    ):
+        """
+        Follow a path while ensuring an NPC stays within range.
+        
+        If the player would move too far from the NPC, we wait for them
+        to catch up before continuing. The NPC is found by ModelID.
+        
+        Args:
+            npc_model_id: ModelID of the NPC to escort
+            path: List of (x, y) waypoints to follow
+            max_distance: Maximum allowed distance from NPC (default 500)
+            status_callback: Optional function(str) for status updates
+            
+        Yields for coroutine execution.
+        Returns True if escort completed, False if NPC lost/died.
+        """
+        def log(msg):
+            Py4GW.Console.Log(BOT_NAME, f"[Escort] {msg}", Py4GW.Console.MessageType.Info)
+            if status_callback:
+                status_callback(msg)
+        
+        def find_npc() -> int:
+            """Find the escort NPC by ModelID."""
+            try:
+                # Check ally array for the NPC
+                allies = GLOBAL_CACHE.AgentArray.GetAllyArray()
+                for agent_id in allies:
+                    if GLOBAL_CACHE.Agent.GetPlayerNumber(agent_id) == npc_model_id:
+                        return agent_id
+                
+                # Also check NPC array
+                npcs = GLOBAL_CACHE.AgentArray.GetNPCArray()
+                for agent_id in npcs:
+                    if GLOBAL_CACHE.Agent.GetPlayerNumber(agent_id) == npc_model_id:
+                        return agent_id
+            except:
+                pass
+            return 0
+        
+        def get_npc_distance(npc_id: int) -> float:
+            """Get distance to the NPC."""
+            try:
+                my_pos = Player.GetXY()
+                npc_pos = GLOBAL_CACHE.Agent.GetXY(npc_id)
+                return Utils.Distance(my_pos, npc_pos)
+            except:
+                return 9999
+        
+        log("Starting escort...")
+        
+        for waypoint_idx, (target_x, target_y) in enumerate(path):
+            target = (target_x, target_y)
+            log(f"Moving to waypoint {waypoint_idx + 1}/{len(path)}")
+            
+            while True:
+                # Safety: Abort if map loading
+                if GLOBAL_CACHE.Map.IsMapLoading():
+                    return False
+                
+                # Find the NPC
+                npc_id = find_npc()
+                if npc_id == 0:
+                    log("Warning: Lost escort NPC!")
+                    # Try to wait a moment - they might be spawning
+                    yield from Routines.Yield.wait(1000)
+                    npc_id = find_npc()
+                    if npc_id == 0:
+                        log("ERROR: Escort NPC not found!")
+                        return False
+                
+                # Check NPC health (if they can die)
+                try:
+                    if GLOBAL_CACHE.Agent.IsDead(npc_id):
+                        log("ERROR: Escort NPC died!")
+                        return False
+                except:
+                    pass
+                
+                # Get positions
+                my_pos = Player.GetXY()
+                npc_distance = get_npc_distance(npc_id)
+                distance_to_target = Utils.Distance(my_pos, target)
+                
+                # Check if we've arrived at this waypoint
+                if distance_to_target < Range.WAYPOINT_ARRIVAL:
+                    break  # Move to next waypoint
+                
+                # Check if we're too far from NPC
+                if npc_distance > max_distance:
+                    # Stop and wait for NPC to catch up
+                    Player.CancelMove()
+                    log(f"Waiting for NPC (distance: {npc_distance:.0f})...")
+                    
+                    # Wait until NPC is closer
+                    wait_timeout = 0
+                    while npc_distance > (max_distance * 0.7):  # Wait until 70% of max
+                        yield from Routines.Yield.wait(200)
+                        npc_distance = get_npc_distance(npc_id)
+                        wait_timeout += 200
+                        
+                        # Safety timeout - if waiting too long, something is wrong
+                        if wait_timeout > 10000:
+                            log("Warning: NPC taking too long to catch up")
+                            break
+                        
+                        # Check if NPC died while waiting
+                        npc_id = find_npc()
+                        if npc_id == 0:
+                            log("ERROR: Lost NPC while waiting!")
+                            return False
+                    
+                    log("NPC caught up, continuing...")
+                
+                # Move toward target
+                Player.Move(target_x, target_y)
+                
+                yield from Routines.Yield.wait(Timing.MOVEMENT_POLL)
+        
+        log("Escort path complete!")
+        return True
+
+    # ==================
     # LEGACY ALIASES
     # ==================
     
