@@ -75,6 +75,10 @@ class Transition:
         This is the PRIMARY method missions should use for starting.
         Handles all the boilerplate of entering a mission.
         
+        NOTE: Some missions have the same map ID for outpost and mission area.
+        This method handles that by checking IsOutpost()/IsExplorable() instead
+        of relying solely on map ID changes.
+        
         Args:
             outpost_map_id: Map ID of the mission outpost
             npc_model_id: Model ID of the NPC that starts the mission
@@ -87,7 +91,7 @@ class Transition:
         """
         traveled = False
         
-        # 1. Handle starting from explorable area (e.g., after Chahbek Village)
+        # 1. Handle starting from explorable area (e.g., after previous mission)
         #    We need to travel to the outpost first - can't setup team or HM in explorable
         if self.is_explorable:
             self._log("Currently in explorable area, traveling to outpost...")
@@ -95,7 +99,8 @@ class Transition:
             traveled = True
         
         # 2. Travel to outpost if not already there
-        if self.current_map_id != outpost_map_id:
+        #    Check both map ID AND that we're actually in an outpost
+        if self.current_map_id != outpost_map_id or not self.is_outpost:
             self._log("Traveling to outpost...")
             yield from self.travel_to(outpost_map_id)
             traveled = True
@@ -150,7 +155,11 @@ class Transition:
         
         self._log("Waiting for mission completion...")
         
-        # Wait for map exit (loading screen or map ID change)
+        # For missions where outpost and mission share same ID,
+        # we need to detect explorable → outpost transition
+        was_explorable = self.is_explorable
+        
+        # Wait for map exit (loading screen or state change)
         timeout = Timeout(timeout_ms)
         while not timeout.expired:
             # Loading screen started
@@ -161,6 +170,11 @@ class Transition:
             # Map ID changed
             if self.current_map_id != current_mission_map_id and self.current_map_id != 0:
                 self._log("Map change detected...")
+                break
+            
+            # For same-ID missions: explorable → outpost transition
+            if was_explorable and self.is_outpost:
+                self._log("Transitioned to outpost (same map ID)...")
                 break
             
             yield
@@ -258,7 +272,7 @@ class Transition:
         """
         Finds NPC, approaches, and sends dialog to start mission.
         
-        Returns True if dialog was sent successfully.
+        Returns True if dialog was sent successfully and we entered the mission.
         """
         # Find the NPC
         npc_agent_id = Routines.Agents.GetAgentIDByModelID(npc_model_id)
@@ -383,35 +397,32 @@ class Transition:
         
         Args:
             timeout_ms: Maximum wait time (default: Timing.MAP_LOAD_TIMEOUT)
-            expect_map_change: If True, waits for loading to START before checking ready
+            expect_map_change: If True, handles case where loading may have already completed
         """
         timeout_ms = timeout_ms or Timing.MAP_LOAD_TIMEOUT
         timeout = Timeout(timeout_ms)
         
         if expect_map_change:
-            # When expecting a map change, we MUST see loading start first
-            # Don't return early just because current map is "ready"
+            # When expecting a map change, we need to either:
+            # 1. See loading in progress (and wait for it to finish)
+            # 2. Detect that loading already completed (we're in explorable and ready)
             while not timeout.expired:
                 if self.is_loading:
                     break
-                # Check if we're no longer in the same state (fast transition)
-                if not self.is_outpost and not self.is_explorable:
-                    # Transitional state
-                    break
-                yield from Routines.Yield.wait(Timing.FRAME_DELAY)
-        else:
-            # Standard wait - but still check loading first
-            # Give a brief moment for loading to potentially start
-            yield from Routines.Yield.wait(Timing.FRAME_DELAY * 2)
-            
-            # Now check state
-            while not timeout.expired:
-                if self.is_loading:
-                    break
-                if self.is_ready and not self.is_loading:
+                # If loading already finished, we're in explorable and ready
+                if self.is_explorable and self.is_ready:
+                    self._log("Map ready (loading already completed)")
                     yield from Routines.Yield.wait(Timing.MAP_LOAD_BUFFER)
                     return
                 yield from Routines.Yield.wait(Timing.FRAME_DELAY)
+        else:
+            # Standard wait - give brief moment for loading to potentially start
+            yield from Routines.Yield.wait(Timing.FRAME_DELAY * 2)
+            
+            # Check if already ready
+            if self.is_ready and not self.is_loading:
+                yield from Routines.Yield.wait(Timing.MAP_LOAD_BUFFER)
+                return
         
         # Wait for loading to finish
         while not timeout.expired and self.is_loading:
@@ -552,7 +563,7 @@ class Transition:
         
         # Wait for mission countdown
         yield from Routines.Yield.wait(Timing.MISSION_COUNTDOWN_WAIT)
-        yield from self._wait_until_map_ready(expect_map_change=True)
+        yield from self._wait_until_map_ready()
 
     # Legacy aliases
     def TravelTo(self, map_id: int):

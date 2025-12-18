@@ -1,10 +1,13 @@
 """
 Movement System - Handles pathfinding and movement control.
 """
+import time
+import Py4GW
 from Py4GWCoreLib import Routines, Player, Utils
 from Py4GWCoreLib.GlobalCache import GLOBAL_CACHE
 
-from data.timing import Timing
+from core.constants import BOT_NAME
+from data.timing import Timing, Range
 
 
 class Movement:
@@ -73,7 +76,168 @@ class Movement:
         self.follow_handler.reset()
         if self.path_handler:
             self.path_handler.reset()
-    
+
+    # ==================
+    # GATE/BARRIER HANDLING
+    # ==================
+
+    def move_with_gate_check(
+        self,
+        x: float,
+        y: float,
+        stuck_timeout_sec: float = 3.0,
+        retry_delay_sec: float = 5.0,
+        arrival_tolerance: int = 150,
+        max_retries: int = 60,
+        status_callback=None
+    ):
+        """
+        Moves to coordinates while handling gates/barriers that may block progress.
+        
+        Detects when the player stops making progress toward the target
+        (e.g., blocked by a closed gate) and waits before retrying.
+        
+        Args:
+            x: Target X coordinate
+            y: Target Y coordinate
+            stuck_timeout_sec: Seconds of no progress before considering blocked (default: 3.0)
+            retry_delay_sec: Seconds to wait before retrying after being blocked (default: 5.0)
+            arrival_tolerance: Distance to target considered "arrived" (default: 150)
+            max_retries: Maximum retry attempts before giving up (default: 60 = ~5 minutes)
+            status_callback: Optional function(str) to report status updates
+            
+        Yields for coroutine execution.
+        Returns True if arrived, False if max_retries exceeded.
+        
+        Example:
+            # Wait at gate position until gate opens, then proceed
+            yield from bot.movement.move_with_gate_check(
+                -1505.30, 14471.92,  # Waypoint AFTER the gate
+                status_callback=lambda msg: self.update_status(msg)
+            )
+        """
+        target = (x, y)
+        retries = 0
+        
+        def log(msg):
+            Py4GW.Console.Log(BOT_NAME, f"[GateCheck] {msg}", Py4GW.Console.MessageType.Info)
+            if status_callback:
+                status_callback(msg)
+        
+        while retries < max_retries:
+            # Get current position and distance to target
+            my_pos = Player.GetXY()
+            current_distance = Utils.Distance(my_pos, target)
+            
+            # Check if we've arrived
+            if current_distance < arrival_tolerance:
+                log(f"Arrived at destination!")
+                return True
+            
+            # Start moving toward target
+            Player.Move(x, y)
+            
+            # Track progress
+            last_progress_time = time.time()
+            best_distance = current_distance
+            
+            # Movement loop - monitor progress
+            while True:
+                # Safety: abort if map is loading
+                if GLOBAL_CACHE.Map.IsMapLoading():
+                    log("Map loading detected, aborting movement")
+                    return False
+                
+                my_pos = Player.GetXY()
+                current_distance = Utils.Distance(my_pos, target)
+                
+                # Check arrival
+                if current_distance < arrival_tolerance:
+                    log(f"Arrived at destination!")
+                    return True
+                
+                # Check if we made progress (got closer to target)
+                if current_distance < best_distance - 10:  # 10 unit buffer to avoid micro-fluctuations
+                    best_distance = current_distance
+                    last_progress_time = time.time()
+                
+                # Check if we're stuck (no progress for stuck_timeout_sec)
+                time_since_progress = time.time() - last_progress_time
+                if time_since_progress >= stuck_timeout_sec:
+                    # We're blocked (probably by a gate)
+                    retries += 1
+                    remaining_dist = int(current_distance)
+                    log(f"Blocked! Distance to target: {remaining_dist}. Waiting {retry_delay_sec}s... (attempt {retries}/{max_retries})")
+                    
+                    # Stop movement while waiting
+                    Player.CancelMove()
+                    
+                    # Wait before retrying
+                    yield from Routines.Yield.wait(int(retry_delay_sec * 1000))
+                    
+                    # Break inner loop to retry outer loop
+                    break
+                
+                yield from Routines.Yield.wait(100)  # Check every 100ms
+        
+        # Max retries exceeded
+        log(f"Max retries ({max_retries}) exceeded. Giving up.")
+        return False
+
+    def move_to_waypoint_with_gate(
+        self,
+        gate_position: tuple,
+        target_position: tuple,
+        stuck_timeout_sec: float = 3.0,
+        retry_delay_sec: float = 5.0,
+        status_callback=None
+    ):
+        """
+        Convenience method: Move to gate position first, then wait for gate to open.
+        
+        This is useful when you need to:
+        1. First walk TO the gate
+        2. Then wait for the gate to open
+        3. Then continue to the next waypoint
+        
+        Args:
+            gate_position: (x, y) tuple - position in front of the gate
+            target_position: (x, y) tuple - position after the gate (used for progress check)
+            stuck_timeout_sec: How long without progress before assuming blocked
+            retry_delay_sec: How long to wait before retrying
+            status_callback: Optional status update function
+            
+        Yields for coroutine execution.
+        Returns True if successfully passed through gate area.
+        
+        Example:
+            yield from bot.movement.move_to_waypoint_with_gate(
+                gate_position=(-155.00, 14430.16),
+                target_position=(-1505.30, 14471.92),
+                status_callback=lambda msg: self.update_status(msg)
+            )
+        """
+        def log(msg):
+            Py4GW.Console.Log(BOT_NAME, f"[GateWait] {msg}", Py4GW.Console.MessageType.Info)
+            if status_callback:
+                status_callback(msg)
+        
+        # Step 1: Move to the gate position (standard movement)
+        log(f"Moving to gate area...")
+        yield from self.move_to(gate_position[0], gate_position[1], tolerance=200)
+        
+        # Step 2: Now try to move through/past the gate
+        log(f"Waiting for gate to open...")
+        success = yield from self.move_with_gate_check(
+            target_position[0],
+            target_position[1],
+            stuck_timeout_sec=stuck_timeout_sec,
+            retry_delay_sec=retry_delay_sec,
+            status_callback=status_callback
+        )
+        
+        return success
+
     # ==================
     # LEGACY ALIASES
     # ==================
