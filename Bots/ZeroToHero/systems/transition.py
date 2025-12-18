@@ -85,34 +85,43 @@ class Transition:
         Yields for coroutine execution.
         Returns True if successfully entered mission, False otherwise.
         """
+        traveled = False
+        
         # 1. Handle starting from explorable area (e.g., after Chahbek Village)
         #    We need to travel to the outpost first - can't setup team or HM in explorable
         if self.is_explorable:
             self._log("Currently in explorable area, traveling to outpost...")
             yield from self.travel_to(outpost_map_id)
+            traveled = True
         
         # 2. Travel to outpost if not already there
         if self.current_map_id != outpost_map_id:
             self._log("Traveling to outpost...")
             yield from self.travel_to(outpost_map_id)
+            traveled = True
         
         # 3. Verify we're in an outpost now
         if not self.is_outpost:
             self._log("Failed to reach outpost!", error=True)
             return False
         
-        # 4. Setup team and hard mode (now safe - we're in outpost)
+        # 4. Wait for game to fully initialize after travel
+        #    The map may report "ready" but party operations need more time
+        if traveled:
+            yield from Routines.Yield.wait(Timing.POST_TRAVEL_DELAY)
+        
+        # 5. Setup team and hard mode (now safe - we're in outpost)
         self._log("Setting up team...")
         yield from self.setup_mission(self.bot, use_hard_mode)
         
-        # 5. Find and interact with mission NPC
+        # 6. Find and interact with mission NPC
         self._log("Starting mission...")
         success = yield from self._start_mission_via_npc(npc_model_id, dialog_id, npc_position)
         
         if not success:
             return False
         
-        # 6. Verify we left the outpost
+        # 7. Verify we left the outpost
         if self.is_outpost:
             self._log("Failed to enter mission!", error=True)
             return False
@@ -178,10 +187,13 @@ class Transition:
             
         Yields for coroutine execution.
         """
-        # Check if already at destination
-        if self.current_map_id == map_id and self.is_ready:
+        # Check if already at destination and ready
+        if self.current_map_id == map_id and self.is_ready and not self.is_loading:
             self._log(f"Already at map {map_id}")
             return
+        
+        # Store current map to detect change
+        original_map_id = self.current_map_id
         
         # Disband party before travel (only works in outpost)
         if self.is_outpost and GLOBAL_CACHE.Party.GetPartySize() > 1:
@@ -191,7 +203,9 @@ class Transition:
         
         self._log(f"Traveling to Map ID: {map_id}")
         GLOBAL_CACHE.Map.Travel(map_id)
-        yield from self._wait_until_map_ready()
+        
+        # Wait for travel to complete (expect map change)
+        yield from self._wait_for_map_transition(original_map_id, map_id)
 
     def setup_mission(self, bot, use_hard_mode: bool = False):
         """
@@ -306,6 +320,63 @@ class Transition:
     # PRIVATE: MAP LOADING
     # ==================
 
+    def _wait_for_map_transition(self, from_map_id: int, to_map_id: int, timeout_ms: int = None):
+        """
+        Waits for a map transition to complete (travel or mission entry).
+        
+        This method properly handles the full transition:
+        1. Wait for loading to START (or map ID to change)
+        2. Wait for loading to FINISH
+        3. Wait for map to be READY
+        4. Add safety buffer
+        
+        Args:
+            from_map_id: The map ID we're leaving
+            to_map_id: The map ID we expect to arrive at
+            timeout_ms: Maximum wait time
+        """
+        timeout_ms = timeout_ms or Timing.MAP_LOAD_TIMEOUT
+        timeout = Timeout(timeout_ms)
+        
+        # Phase 1: Wait for loading to START or map to change
+        # The map might still show "ready" for a moment after Travel() is called
+        self._log("Waiting for map transition...")
+        
+        while not timeout.expired:
+            # Check if loading started
+            if self.is_loading:
+                self._log("Loading started...")
+                break
+            
+            # Check if map already changed (very fast transition)
+            current = self.current_map_id
+            if current != from_map_id and current != 0:
+                self._log(f"Map changed to {current}")
+                break
+            
+            yield from Routines.Yield.wait(Timing.FRAME_DELAY)
+        
+        if timeout.expired:
+            self._log("Timeout waiting for loading to start!", warning=True)
+            return
+        
+        # Phase 2: Wait for loading to FINISH
+        while not timeout.expired and self.is_loading:
+            yield from Routines.Yield.wait(Timing.MAP_READY_POLL)
+        
+        # Phase 3: Wait for map to be READY
+        while not timeout.expired and not self.is_ready:
+            yield from Routines.Yield.wait(Timing.MAP_READY_POLL)
+        
+        # Phase 4: Verify we arrived at expected map (if specified)
+        if to_map_id > 0 and self.current_map_id != to_map_id:
+            self._log(f"Warning: Expected map {to_map_id}, arrived at {self.current_map_id}", warning=True)
+        
+        # Phase 5: Safety buffer - game needs a moment after "ready" for full initialization
+        yield from Routines.Yield.wait(Timing.MAP_LOAD_BUFFER)
+        
+        self._log(f"Map transition complete. Now at map {self.current_map_id}")
+
     def _wait_until_map_ready(self, timeout_ms: int = None, expect_map_change: bool = False):
         """
         Waits for map to finish loading and be ready.
@@ -318,29 +389,26 @@ class Transition:
         timeout = Timeout(timeout_ms)
         
         if expect_map_change:
-            # When expecting a map change (like mission entry), we MUST see loading start
+            # When expecting a map change, we MUST see loading start first
             # Don't return early just because current map is "ready"
-            loading_started = False
-            
             while not timeout.expired:
                 if self.is_loading:
-                    loading_started = True
                     break
-                # Also check if map ID changed (some transitions are fast)
+                # Check if we're no longer in the same state (fast transition)
+                if not self.is_outpost and not self.is_explorable:
+                    # Transitional state
+                    break
                 yield from Routines.Yield.wait(Timing.FRAME_DELAY)
-            
-            if not loading_started and not timeout.expired:
-                # Check if we somehow ended up in a different map state
-                if not self.is_outpost:
-                    # We're in explorable now, transition happened
-                    yield from Routines.Yield.wait(Timing.MAP_LOAD_BUFFER)
-                    return
         else:
-            # Standard wait - check if already loading or ready
+            # Standard wait - but still check loading first
+            # Give a brief moment for loading to potentially start
+            yield from Routines.Yield.wait(Timing.FRAME_DELAY * 2)
+            
+            # Now check state
             while not timeout.expired:
                 if self.is_loading:
                     break
-                if self.is_ready:
+                if self.is_ready and not self.is_loading:
                     yield from Routines.Yield.wait(Timing.MAP_LOAD_BUFFER)
                     return
                 yield from Routines.Yield.wait(Timing.FRAME_DELAY)
@@ -353,7 +421,7 @@ class Transition:
         while not timeout.expired and not self.is_ready:
             yield from Routines.Yield.wait(Timing.MAP_READY_POLL)
         
-        # Final buffer
+        # Final buffer for full initialization
         yield from Routines.Yield.wait(Timing.MAP_LOAD_BUFFER)
 
     # ==================

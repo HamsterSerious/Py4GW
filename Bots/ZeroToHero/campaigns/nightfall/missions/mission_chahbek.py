@@ -64,6 +64,9 @@ class MissionChahbek(BaseTask):
     CATAPULT_1_POSITION = (-1691.00, -2515.00)
     CATAPULT_2_POSITION = (-1733.00, -4172.00)
     
+    # Timing (mission-specific)
+    SHIP_DESTROY_DELAY = 2000       # Wait for ship destruction animation
+    
     # Bonus tracking
     RECRUIT_MODELS = [4809, 4810]
     
@@ -200,7 +203,7 @@ class MissionChahbek(BaseTask):
         catapult_agent = bot.interaction.find_gadget_by_id(catapult_model)
         if catapult_agent:
             yield from bot.interaction.move_to_and_interact(catapult_agent)
-            yield from Routines.Yield.wait(2000)  # Wait for ship destruction animation
+            yield from Routines.Yield.wait(self.SHIP_DESTROY_DELAY)
 
     def _monitor_recruits(self, obj_bonus):
         """

@@ -17,6 +17,7 @@ class Timing:
     MAP_LOAD_BUFFER = 1000          # Extra buffer after map reports ready
     MAP_LOAD_TIMEOUT = 30000        # Max time to wait for map load
     MAP_EXIT_TIMEOUT = 60000        # Max time to wait for mission end
+    POST_TRAVEL_DELAY = 1500        # Wait after arriving before party operations (game needs time to initialize)
     
     # ===================
     # PARTY MANAGEMENT
