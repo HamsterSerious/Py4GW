@@ -54,7 +54,7 @@ class MissionJokanur(BaseTask):
     DIALOG_START = 0x84
     
     # Bosses / Targets
-    BOSS_DAREHK_MODEL = 5545          # Darehk the Quick (Trial 1)
+    BOSS_DAREHK_MODEL = 5545          # Darehk the Quick (Trial 1) - NOTE: Same as Ghostly Sunspear!
     BOSS_APOCRYPHIA_MODEL = 4335      # Final boss
     
     # NPCs to escort
@@ -99,7 +99,7 @@ class MissionJokanur(BaseTask):
     PEDESTAL_1_POSITION = (-5934.00, 11249.00)
     
     # Trial 2 paths
-    PATH_TRIAL2_TABLET1 = [
+    PATH_TRIAL2_START = [
         (-9297.15, 11574.76),
     ]
     HERO_FLAG_POSITION_1 = (-9826.88, 7815.42)
@@ -110,6 +110,7 @@ class MissionJokanur(BaseTask):
         (-12411.94, 11786.64),
     ]
     HERO_FLAG_POSITION_2 = (-12411.94, 11786.64)
+    
     PATH_TRIAL2_RETURN = [
         (-12266.74, 9621.60),
         (-11965.52, 6699.59),
@@ -145,6 +146,7 @@ class MissionJokanur(BaseTask):
     GATE_STUCK_TIMEOUT = 3.0          # Seconds without progress = blocked
     GATE_RETRY_DELAY = 5.0            # Seconds to wait before retry
     DAREHK_ENGAGE_RANGE = 3000        # Extended range to engage Darehk
+    LOOT_PICKUP_TIMEOUT = 5000        # Timeout for item pickup
 
     # ==================
     # MAIN EXECUTION
@@ -161,6 +163,10 @@ class MissionJokanur(BaseTask):
             obj_trial2 = self.add_objective("Trial 2: Retrieve Stone Tablets", total=2)
             obj_trial3 = self.add_objective("Trial 3: Escort Kadash")
             obj_boss = self.add_objective("Defeat Apocryphia")
+            
+            # === SETUP LOOT WHITELIST ===
+            # Whitelist Stone Tablet so we can pick it up (non-yielding call)
+            bot.items.add_to_whitelist(self.ITEM_STONE_TABLET)
             
             # === ENTER MISSION ===
             success = yield from bot.transition.enter_mission_from_outpost(
@@ -208,8 +214,8 @@ class MissionJokanur(BaseTask):
             self.set_active_objective("Trial 1: Defeat Darehk the Quick")
             self.update_status("Hunting Darehk the Quick...")
             
-            # TODO: Need to implement extended engage range for this boss
-            # For now, use hunt_target_along_path with default ranges
+            # hunt_target_along_path now correctly finds ENEMIES only
+            # This distinguishes Darehk (enemy, ModelID 5545) from Gatah (ally, same ModelID)
             killed = yield from bot.combat.hunt_target_along_path(
                 path=self.PATH_TO_DAREHK,
                 target_model_id=self.BOSS_DAREHK_MODEL,
@@ -217,70 +223,143 @@ class MissionJokanur(BaseTask):
             )
             
             if not killed:
-                self.update_status("Warning: Darehk not found - searching area...")
+                self.update_status("Warning: Darehk not confirmed dead - searching area...")
                 yield from bot.combat.kill_all(radius=2500)
+                
+                # Double check using enemy-specific method
+                if not bot.combat.is_enemy_dead(self.BOSS_DAREHK_MODEL):
+                    self.update_status("ERROR: Darehk still alive!")
+                    self.failed = True
+                    return
             
-            # TODO: Pick up Stone Tablet dropped by Darehk
-            # Needs: bot.items.find_item_by_model(self.ITEM_STONE_TABLET)
-            # Needs: bot.items.pickup_item(item_id)
-            # Needs: Check if holding bundle
-            self.update_status("TODO: Pick up Stone Tablet")
-            yield from Routines.Yield.wait(1000)  # Placeholder
+            self.update_status("Darehk defeated! Picking up Stone Tablet...")
             
-            # TODO: Use tablet on first pedestal
-            # yield from bot.interaction.use_bundle_on_gadget(self.GADGET_PEDESTAL_1)
-            self.update_status("TODO: Use tablet on pedestal")
-            yield from Routines.Yield.wait(1000)  # Placeholder
+            # Wait a moment for the item to drop
+            yield from Routines.Yield.wait(500)
+            
+            # Pick up Stone Tablet using Items system
+            yield from bot.items.pickup_items(self.LOOT_PICKUP_TIMEOUT)
+            
+            # Verify we picked it up (holding a bundle)
+            if not bot.interaction.is_holding_bundle():
+                self.update_status("Warning: May not have picked up Stone Tablet, retrying...")
+                yield from Routines.Yield.wait(500)
+                yield from bot.items.pickup_items(self.LOOT_PICKUP_TIMEOUT)
+            
+            if bot.interaction.is_holding_bundle():
+                self.update_status("Stone Tablet acquired!")
+            else:
+                self.update_status("Warning: Could not confirm Stone Tablet pickup")
+            
+            # Move to and use tablet on first pedestal
+            self.update_status("Moving to Stone Pedestal...")
+            yield from bot.combat.move_and_clear_path([self.PEDESTAL_1_POSITION])
+            
+            # Use tablet on pedestal (interact while holding bundle)
+            self.update_status("Using tablet on pedestal...")
+            yield from bot.interaction.use_bundle_on_gadget(self.GADGET_PEDESTAL_1)
             
             self.complete_objective("Trial 1: Defeat Darehk the Quick")
             
             # === PHASE 3: Trial 2 - Retrieve Two Stone Tablets ===
             self.set_active_objective("Trial 2: Retrieve Stone Tablets")
             
+            # Add Ghostly Sunspears to ignore list (same ModelID as Darehk!)
+            bot.combat.add_to_ignore_list(self.ENEMY_GHOSTLY_SUNSPEAR)
+            
             # --- Tablet 1 ---
             self.update_status("Trial 2: Retrieving first tablet...")
             
-            # TODO: Flag heroes to avoid killing Ghostly Sunspears
-            # Needs: bot.hero_control.flag_all_heroes(self.HERO_FLAG_POSITION_1)
-            # TODO: Add Ghostly Sunspear to enemy ignore list
-            # Needs: bot.combat.add_to_ignore_list(self.ENEMY_GHOSTLY_SUNSPEAR)
+            # Move toward tablet area
+            yield from bot.combat.move_and_clear_path(self.PATH_TRIAL2_START)
             
-            # TODO: Find closest Stone Tablet item and pick it up
-            # TODO: Move to drop position and drop tablet
+            # TODO: Flag heroes to avoid them killing Ghostly Sunspears
+            # Needs: bot.hero.flag_all(self.HERO_FLAG_POSITION_1)
+            self.update_status("TODO: Flag heroes to safe position")
+            
+            # Pick up nearest Stone Tablet
+            self.update_status("Picking up first tablet...")
+            yield from bot.items.pickup_items(self.LOOT_PICKUP_TIMEOUT)
+            
+            if not bot.interaction.is_holding_bundle():
+                self.update_status("Warning: Could not pick up tablet 1")
+            
+            # Move to drop position and drop tablet
+            self.update_status("Carrying tablet to drop position...")
+            yield from bot.movement.move_to(self.TABLET1_DROP_POSITION[0], self.TABLET1_DROP_POSITION[1])
+            
+            # Drop the tablet
+            self.update_status("Dropping tablet...")
+            yield from bot.interaction.drop_bundle()
+            
             # TODO: Unflag heroes
+            # Needs: bot.hero.unflag_all()
             
             obj_trial2.current_count = 1
-            self.update_status("TODO: First tablet retrieved (placeholder)")
-            yield from Routines.Yield.wait(1000)  # Placeholder
             
             # --- Tablet 2 ---
             self.update_status("Trial 2: Retrieving second tablet...")
             
-            # TODO: Similar process for second tablet
-            # TODO: Use tablets on pedestals 2 and 3
+            # Move to second tablet area
+            yield from bot.combat.move_and_clear_path(self.PATH_TRIAL2_TABLET2_APPROACH)
+            
+            # TODO: Flag heroes again
+            # Needs: bot.hero.flag_all(self.HERO_FLAG_POSITION_2)
+            self.update_status("TODO: Flag heroes for tablet 2")
+            
+            # Pick up nearest Stone Tablet
+            self.update_status("Picking up second tablet...")
+            yield from bot.items.pickup_items(self.LOOT_PICKUP_TIMEOUT)
+            
+            if not bot.interaction.is_holding_bundle():
+                self.update_status("Warning: Could not pick up tablet 2")
+            
+            # Return with tablet
+            self.update_status("Returning with tablet...")
+            yield from bot.combat.move_and_clear_path(self.PATH_TRIAL2_RETURN)
+            
+            # TODO: Unflag heroes
+            # Needs: bot.hero.unflag_all()
+            
+            # Use tablet on pedestal 2
+            self.update_status("Using tablet on first pedestal...")
+            yield from bot.interaction.use_bundle_on_gadget(self.GADGET_PEDESTAL_2)
+            
+            # Pick up remaining tablet and use on pedestal 3
+            self.update_status("Picking up final tablet...")
+            yield from bot.items.pickup_items(self.LOOT_PICKUP_TIMEOUT)
+            
+            self.update_status("Using tablet on second pedestal...")
+            yield from bot.interaction.use_bundle_on_gadget(self.GADGET_PEDESTAL_3)
+            
+            # Clear ignore list now that Trial 2 is done
+            bot.combat.clear_ignore_list()
             
             obj_trial2.current_count = 2
             self.complete_objective("Trial 2: Retrieve Stone Tablets")
-            self.update_status("TODO: Second tablet retrieved (placeholder)")
-            yield from Routines.Yield.wait(1000)  # Placeholder
             
             # === PHASE 4: Trial 3 - Escort Kadash ===
             self.set_active_objective("Trial 3: Escort Kadash")
             self.update_status("Moving to Kadash...")
             
             yield from bot.combat.move_and_clear_path(self.PATH_TO_KADASH)
+            yield from bot.movement.move_to(self.KADASH_START_POSITION[0], self.KADASH_START_POSITION[1])
             
             # TODO: Implement escort functionality
-            # Needs: bot.movement.escort_npc(
+            # Needs: yield from bot.movement.escort_npc(
             #     npc_model_id=self.NPC_KADASH_MODEL,
             #     path=self.PATH_ESCORT_KADASH,
-            #     max_distance=1000
+            #     max_distance=1000,
+            #     status_callback=lambda msg: self.update_status(msg)
             # )
-            self.update_status("TODO: Escort Kadash (placeholder)")
+            self.update_status("TODO: Escort Kadash along path")
+            yield from bot.combat.move_and_clear_path(self.PATH_ESCORT_KADASH)
             yield from Routines.Yield.wait(1000)  # Placeholder
             
-            # TODO: Wait for cutscene after escort completes
-            # Needs: bot.wait_for_cutscene()
+            # Wait for cutscene after escort completes
+            # TODO: yield from bot.transition.wait_for_cutscene()
+            self.update_status("TODO: Wait for cutscene")
+            yield from Routines.Yield.wait(2000)  # Placeholder
             
             self.complete_objective("Trial 3: Escort Kadash")
             
@@ -297,9 +376,13 @@ class MissionJokanur(BaseTask):
                 self.complete_objective("Defeat Apocryphia")
             else:
                 self.update_status("Warning: Apocryphia not confirmed dead")
+                # Try to verify
+                if bot.combat.is_enemy_dead(self.BOSS_APOCRYPHIA_MODEL):
+                    self.complete_objective("Defeat Apocryphia")
             
             # === MISSION END ===
             # Cutscene plays, then teleport to Kamadan
+            self.update_status("Waiting for mission completion...")
             yield from bot.transition.wait_for_mission_end(self.MAP_ID_MISSION)
             self.update_status("Mission Complete!")
             
@@ -311,4 +394,8 @@ class MissionJokanur(BaseTask):
             self.failed = True
             
         finally:
+            # Clean up
+            bot.combat.clear_ignore_list()
+            # Clear the whitelist to avoid picking up tablets in other missions
+            bot.items.clear_whitelist()
             self.finished = True
