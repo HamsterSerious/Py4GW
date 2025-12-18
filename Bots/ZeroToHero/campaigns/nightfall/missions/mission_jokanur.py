@@ -147,6 +147,7 @@ class MissionJokanur(BaseTask):
     GATE_RETRY_DELAY = 5.0            # Seconds to wait before retry
     DAREHK_ENGAGE_RANGE = 3000        # Extended range to engage Darehk
     LOOT_PICKUP_TIMEOUT = 5000        # Timeout for item pickup
+    CLEAR_AREA_RADIUS = 2000          # Radius to clear enemies before pickup
 
     # ==================
     # MAIN EXECUTION
@@ -222,9 +223,15 @@ class MissionJokanur(BaseTask):
                 engage_range=self.DAREHK_ENGAGE_RANGE,
             )
             
+            # === SAVE OUR POSITION - we were in fighting range when he died ===
+            from Py4GWCoreLib import Player
+            import Py4GW
+            fight_position = Player.GetXY()
+            Py4GW.Console.Log("ZeroToHero", f"Darehk fight position saved: ({fight_position[0]:.0f}, {fight_position[1]:.0f})", Py4GW.Console.MessageType.Info)
+            
             if not killed:
                 self.update_status("Warning: Darehk not confirmed dead - searching area...")
-                yield from bot.combat.kill_all(radius=2500)
+                yield from bot.combat.kill_all(radius=self.CLEAR_AREA_RADIUS)
                 
                 # Double check using enemy-specific method
                 if not bot.combat.is_enemy_dead(self.BOSS_DAREHK_MODEL):
@@ -232,24 +239,32 @@ class MissionJokanur(BaseTask):
                     self.failed = True
                     return
             
-            self.update_status("Darehk defeated! Picking up Stone Tablet...")
+            self.update_status("Darehk defeated!")
             
-            # Wait a moment for the item to drop
-            yield from Routines.Yield.wait(500)
+            # === Clear enemies, then return to fight position to pick up tablet ===
+            self.update_status("Clearing remaining enemies...")
+            yield from bot.combat.kill_all(radius=1500)  # Clear nearby first
             
-            # Pick up Stone Tablet using Items system
-            yield from bot.items.pickup_items(self.LOOT_PICKUP_TIMEOUT)
+            # Return to where we were when Darehk died (tablet should be nearby)
+            self.update_status(f"Returning to fight area ({fight_position[0]:.0f}, {fight_position[1]:.0f})...")
+            yield from bot.combat.move_and_clear_path([fight_position])
             
-            # Verify we picked it up (holding a bundle)
-            if not bot.interaction.is_holding_bundle():
-                self.update_status("Warning: May not have picked up Stone Tablet, retrying...")
-                yield from Routines.Yield.wait(500)
-                yield from bot.items.pickup_items(self.LOOT_PICKUP_TIMEOUT)
+            # Wait for item to drop
+            self.update_status("Waiting for Stone Tablet to drop...")
+            yield from Routines.Yield.wait(2000)  # Longer wait for drop animation
             
+            # Pick up Stone Tablet with larger search range (default is ~1012)
+            self.update_status("Picking up Stone Tablet...")
+            yield from bot.items.pickup_items(
+                pickup_timeout_ms=self.LOOT_PICKUP_TIMEOUT,
+                max_distance=2500  # Larger range to find tablet
+            )
+            
+            # Check if we're holding the tablet
             if bot.interaction.is_holding_bundle():
                 self.update_status("Stone Tablet acquired!")
             else:
-                self.update_status("Warning: Could not confirm Stone Tablet pickup")
+                self.update_status("Warning: Could not confirm Stone Tablet pickup - continuing anyway...")
             
             # Move to and use tablet on first pedestal
             self.update_status("Moving to Stone Pedestal...")
@@ -277,9 +292,12 @@ class MissionJokanur(BaseTask):
             # Needs: bot.hero.flag_all(self.HERO_FLAG_POSITION_1)
             self.update_status("TODO: Flag heroes to safe position")
             
-            # Pick up nearest Stone Tablet
+            # Pick up nearest Stone Tablet using whitelist method
             self.update_status("Picking up first tablet...")
-            yield from bot.items.pickup_items(self.LOOT_PICKUP_TIMEOUT)
+            yield from bot.items.pickup_items(
+                pickup_timeout_ms=self.LOOT_PICKUP_TIMEOUT,
+                max_distance=2500
+            )
             
             if not bot.interaction.is_holding_bundle():
                 self.update_status("Warning: Could not pick up tablet 1")
@@ -307,9 +325,12 @@ class MissionJokanur(BaseTask):
             # Needs: bot.hero.flag_all(self.HERO_FLAG_POSITION_2)
             self.update_status("TODO: Flag heroes for tablet 2")
             
-            # Pick up nearest Stone Tablet
+            # Pick up nearest Stone Tablet using whitelist method
             self.update_status("Picking up second tablet...")
-            yield from bot.items.pickup_items(self.LOOT_PICKUP_TIMEOUT)
+            yield from bot.items.pickup_items(
+                pickup_timeout_ms=self.LOOT_PICKUP_TIMEOUT,
+                max_distance=2500
+            )
             
             if not bot.interaction.is_holding_bundle():
                 self.update_status("Warning: Could not pick up tablet 2")
@@ -327,7 +348,10 @@ class MissionJokanur(BaseTask):
             
             # Pick up remaining tablet and use on pedestal 3
             self.update_status("Picking up final tablet...")
-            yield from bot.items.pickup_items(self.LOOT_PICKUP_TIMEOUT)
+            yield from bot.items.pickup_items(
+                pickup_timeout_ms=self.LOOT_PICKUP_TIMEOUT,
+                max_distance=2500
+            )
             
             self.update_status("Using tablet on second pedestal...")
             yield from bot.interaction.use_bundle_on_gadget(self.GADGET_PEDESTAL_3)

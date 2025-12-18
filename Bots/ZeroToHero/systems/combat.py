@@ -7,6 +7,7 @@ Provides:
 - Boss/target hunting along paths
 - Enemy-specific target finding (ignores allies with same ModelID)
 """
+import time
 from Py4GWCoreLib import Player, AgentArray, Utils
 from Py4GWCoreLib.Builds.AutoCombat import AutoCombat
 from Py4GWCoreLib.GlobalCache import GLOBAL_CACHE
@@ -289,6 +290,8 @@ class Combat:
         This is the standard "move through area" method that handles
         combat automatically. Respects the ignore_models list.
         
+        Includes stuck detection - if not making progress, re-issues move command.
+        
         Args:
             path_coords: List of (x, y) tuples defining the path
             aggro_range: Range to check for enemies (default: self.aggro_range)
@@ -296,11 +299,16 @@ class Combat:
         Yields for coroutine execution.
         """
         aggro = aggro_range or self.aggro_range
+        stuck_timeout = 3.0  # Seconds without progress = stuck
         
         for x, y in path_coords:
             # Safety: Abort if map loading
             if GLOBAL_CACHE.Map.IsMapLoading():
                 return
+            
+            target = (x, y)
+            last_progress_time = time.time()
+            best_distance = Utils.Distance(Player.GetXY(), target)
             
             # Start moving to waypoint
             Player.Move(x, y)
@@ -310,10 +318,24 @@ class Combat:
                 if GLOBAL_CACHE.Map.IsMapLoading():
                     return
                 
-                # Check arrival
                 my_pos = Player.GetXY()
-                if Utils.Distance(my_pos, (x, y)) < Range.WAYPOINT_ARRIVAL:
+                current_distance = Utils.Distance(my_pos, target)
+                
+                # Check arrival
+                if current_distance < Range.WAYPOINT_ARRIVAL:
                     break
+                
+                # Track progress
+                if current_distance < best_distance - 10:
+                    best_distance = current_distance
+                    last_progress_time = time.time()
+                
+                # Check if stuck (no progress for stuck_timeout seconds)
+                time_stuck = time.time() - last_progress_time
+                if time_stuck > stuck_timeout:
+                    # Re-issue move command to get unstuck
+                    Player.Move(x, y)
+                    last_progress_time = time.time()  # Reset timer but keep best_distance
                 
                 # Check for enemies (respecting ignore list)
                 enemies = self._get_enemies_in_range(aggro)
@@ -324,6 +346,10 @@ class Combat:
                     # Safety check after combat
                     if GLOBAL_CACHE.Map.IsMapLoading():
                         return
+                    
+                    # Reset progress tracking after combat
+                    best_distance = Utils.Distance(Player.GetXY(), target)
+                    last_progress_time = time.time()
                     
                     # Resume movement to same waypoint
                     Player.Move(x, y)

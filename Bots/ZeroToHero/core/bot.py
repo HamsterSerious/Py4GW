@@ -15,6 +15,7 @@ from systems.movement import Movement
 from systems.combat import Combat
 from systems.transition import Transition
 from systems.interaction import Interaction
+from systems.items import Items
 from ui.dashboard import DashboardUI
 from ui.notification_window import NotificationWindow
 from ui.queue_window import QueueWindow
@@ -40,6 +41,7 @@ class ZeroToHeroBot(BottingClass):
         self.combat = Combat()
         self.transition = Transition(self)
         self.interaction = Interaction(self)
+        self.items = Items(self)  # NEW: Items system for loot management
         
         # Team Management
         self.team_manager = TeamManager(self)

@@ -5,6 +5,7 @@ Provides:
 - Loot whitelist/blacklist management
 - Item pickup (ground items)
 - Finding items by ModelID
+- Direct pickup for specific mission items
 """
 import Py4GW
 from Py4GWCoreLib import Player, Utils, Routines
@@ -24,7 +25,8 @@ class Items:
     Key methods for missions:
     - add_to_whitelist(): Add ModelID to pickup whitelist
     - pickup_items(): Pick up whitelisted items nearby
-    - find_item_by_model_id(): Find ground item by ModelID
+    - pickup_item_by_model_id(): Direct pickup of specific item (best for mission items)
+    - find_nearest_item_by_model_id(): Find ground item by ModelID
     """
     
     def __init__(self, bot):
@@ -87,45 +89,207 @@ class Items:
         self._loot_config.ClearBlacklist()
     
     # ==================
-    # ITEM PICKUP (Yielding)
+    # DIRECT ITEM PICKUP (Yielding) - Best for mission items
     # ==================
     
-    def pickup_items(self, pickup_timeout_ms: int = 5000):
+    def pickup_item_by_model_id(self, model_id: int, max_range: int = None, timeout_ms: int = 5000):
+        """
+        Find and pick up a specific item by ModelID.
+        
+        This is the RECOMMENDED method for picking up mission-specific items
+        like Stone Tablets, quest items, etc. It directly targets the item
+        rather than relying on whitelist filtering.
+        
+        Args:
+            model_id: The ModelID of the item to pick up
+            max_range: Maximum search range (default: Range.SPIRIT)
+            timeout_ms: Max time to wait for pickup
+            
+        Yields for coroutine execution.
+        Returns True if item was found and picked up.
+        """
+        max_range = max_range or Range.SPIRIT
+        
+        # Find the item
+        agent_id = self.find_nearest_item_by_model_id(model_id, max_range)
+        
+        if agent_id == 0:
+            Py4GW.Console.Log(
+                "Items", 
+                f"No item with ModelID {model_id} found within range {max_range}.", 
+                Py4GW.Console.MessageType.Warning
+            )
+            return False
+        
+        # Get item position
+        try:
+            item_pos = GLOBAL_CACHE.Agent.GetXY(agent_id)
+            Py4GW.Console.Log(
+                "Items", 
+                f"Found item {model_id} (agent {agent_id}) at ({item_pos[0]:.0f}, {item_pos[1]:.0f})", 
+                Py4GW.Console.MessageType.Info
+            )
+        except Exception as e:
+            Py4GW.Console.Log(
+                "Items", 
+                f"Error getting item position: {e}", 
+                Py4GW.Console.MessageType.Error
+            )
+            return False
+        
+        # Move close to the item
+        my_pos = Player.GetXY()
+        dist = Utils.Distance(my_pos, item_pos)
+        
+        if dist > 200:
+            Py4GW.Console.Log(
+                "Items", 
+                f"Moving to item (distance: {dist:.0f})...", 
+                Py4GW.Console.MessageType.Info
+            )
+            yield from self.bot.movement.move_to(item_pos[0], item_pos[1], tolerance=150)
+        
+        # Pick up the item
+        Py4GW.Console.Log(
+            "Items", 
+            f"Picking up item {model_id}...", 
+            Py4GW.Console.MessageType.Info
+        )
+        
+        Player.PickUpItem(agent_id)
+        yield from Routines.Yield.wait(500)
+        
+        # Verify pickup - check if item is still there
+        still_exists = self.find_nearest_item_by_model_id(model_id, max_range)
+        if still_exists == 0:
+            Py4GW.Console.Log(
+                "Items", 
+                f"Item {model_id} picked up successfully!", 
+                Py4GW.Console.MessageType.Success
+            )
+            return True
+        else:
+            # Item still exists - maybe we picked up a different one, or failed
+            # Check if we're holding a bundle
+            if self.bot.interaction.is_holding_bundle():
+                Py4GW.Console.Log(
+                    "Items", 
+                    f"Now holding bundle (item pickup succeeded).", 
+                    Py4GW.Console.MessageType.Success
+                )
+                return True
+            else:
+                Py4GW.Console.Log(
+                    "Items", 
+                    f"Item {model_id} may not have been picked up.", 
+                    Py4GW.Console.MessageType.Warning
+                )
+                return False
+    
+    def wait_for_item_drop(self, model_id: int, timeout_ms: int = 5000, check_interval_ms: int = 250):
+        """
+        Wait for an item to appear on the ground.
+        
+        Useful after killing a boss that drops a quest item.
+        
+        Args:
+            model_id: The ModelID to wait for
+            timeout_ms: Maximum time to wait
+            check_interval_ms: How often to check for the item
+            
+        Yields for coroutine execution.
+        Returns True if item appeared, False if timeout.
+        """
+        from utils.timer import Timeout
+        
+        timeout = Timeout(timeout_ms)
+        
+        while not timeout.expired:
+            agent_id = self.find_nearest_item_by_model_id(model_id, Range.SPIRIT)
+            if agent_id != 0:
+                Py4GW.Console.Log(
+                    "Items", 
+                    f"Item {model_id} appeared on ground (agent {agent_id}).", 
+                    Py4GW.Console.MessageType.Info
+                )
+                return True
+            
+            yield from Routines.Yield.wait(check_interval_ms)
+        
+        Py4GW.Console.Log(
+            "Items", 
+            f"Timeout waiting for item {model_id} to drop.", 
+            Py4GW.Console.MessageType.Warning
+        )
+        return False
+    
+    # ==================
+    # WHITELIST-BASED PICKUP (Yielding)
+    # ==================
+    
+    def pickup_items(self, pickup_timeout_ms: int = 5000, max_distance: int = None):
         """
         Pick up all whitelisted items within range.
         
         Uses the core LootConfig filtering to find valid items.
+        For mission-specific items, prefer pickup_item_by_model_id() instead.
         
         Args:
             pickup_timeout_ms: Max time to spend picking up items
+            max_distance: Maximum search distance (default: Earshot ~1012)
             
         Yields for coroutine execution.
         Returns True if at least one item was picked up.
         """
         from Py4GWCoreLib.enums import Range as CoreRange
         
-        # Get filtered loot array from LootConfig
-        filtered_items = self._loot_config.GetfilteredLootArray(
-            distance=CoreRange.Earshot.value,
-            multibox_loot=True,
-            allow_unasigned_loot=True
-        )
+        # Use provided distance or default to Earshot
+        search_distance = max_distance if max_distance else CoreRange.Earshot.value
         
-        if not filtered_items:
+        # Get filtered loot array from LootConfig
+        try:
+            filtered_items = self._loot_config.GetfilteredLootArray(
+                distance=search_distance,
+                multibox_loot=True,
+                allow_unasigned_loot=True
+            )
+        except Exception as e:
+            Py4GW.Console.Log(
+                "Items", 
+                f"Error getting filtered loot array: {e}", 
+                Py4GW.Console.MessageType.Error
+            )
             return False
         
-        picked_up_any = False
+        if not filtered_items:
+            Py4GW.Console.Log(
+                "Items", 
+                f"No whitelisted items found within {search_distance} units.", 
+                Py4GW.Console.MessageType.Info
+            )
+            return False
         
-        # Use the core loot routine
-        yield from Routines.Yield.Items.LootItems(
-            filtered_items, 
-            pickup_timeout=pickup_timeout_ms
+        Py4GW.Console.Log(
+            "Items", 
+            f"Found {len(filtered_items)} whitelisted item(s) to pick up.", 
+            Py4GW.Console.MessageType.Info
         )
         
-        # Check if we're now holding something (for bundle items)
-        picked_up_any = len(filtered_items) > 0
+        # Use the core loot routine
+        try:
+            yield from Routines.Yield.Items.LootItems(
+                filtered_items, 
+                pickup_timeout=pickup_timeout_ms
+            )
+        except Exception as e:
+            Py4GW.Console.Log(
+                "Items", 
+                f"Error during LootItems: {e}", 
+                Py4GW.Console.MessageType.Error
+            )
+            return False
         
-        return picked_up_any
+        return True
     
     def pickup_item_by_agent_id(self, agent_id: int, timeout_ms: int = 5000):
         """
@@ -146,49 +310,6 @@ class Items:
         yield from self.bot.movement.move_to(item_pos[0], item_pos[1], tolerance=100)
         
         # Pick it up
-        Player.PickUpItem(agent_id)
-        yield from Routines.Yield.wait(500)
-        
-        return True
-    
-    def pickup_nearest_by_model_id(self, model_id: int, max_range: int = None, timeout_ms: int = 5000):
-        """
-        Find and pick up the nearest item with a specific ModelID.
-        
-        This is useful for mission-specific items like Stone Tablets
-        where you need to pick up the closest one.
-        
-        Args:
-            model_id: The ModelID of the item to pick up
-            max_range: Maximum search range (default: Range.SPIRIT)
-            timeout_ms: Max time to wait for pickup
-            
-        Yields for coroutine execution.
-        Returns True if item was found and picked up.
-        """
-        max_range = max_range or Range.SPIRIT
-        
-        # Find the nearest item with this ModelID
-        agent_id = self.find_nearest_item_by_model_id(model_id, max_range)
-        
-        if agent_id == 0:
-            Py4GW.Console.Log(
-                "Items", 
-                f"No item with ModelID {model_id} found within range {max_range}.", 
-                Py4GW.Console.MessageType.Warning
-            )
-            return False
-        
-        # Move to and pick up the item
-        item_pos = GLOBAL_CACHE.Agent.GetXY(agent_id)
-        Py4GW.Console.Log(
-            "Items", 
-            f"Found item {model_id} at ({item_pos[0]:.0f}, {item_pos[1]:.0f}), picking up...", 
-            Py4GW.Console.MessageType.Info
-        )
-        
-        yield from self.bot.movement.move_to(item_pos[0], item_pos[1], tolerance=100)
-        
         Player.PickUpItem(agent_id)
         yield from Routines.Yield.wait(500)
         
@@ -309,3 +430,49 @@ class Items:
             True if at least one matching item is nearby
         """
         return self.find_nearest_item_by_model_id(model_id, max_range) != 0
+    
+    def debug_nearby_items(self, max_range: int = None):
+        """
+        Log all items nearby for debugging purposes.
+        
+        Args:
+            max_range: Maximum search range (default: Range.SPIRIT)
+        """
+        max_range = max_range or Range.SPIRIT
+        
+        try:
+            items = GLOBAL_CACHE.AgentArray.GetItemArray()
+            my_pos = Player.GetXY()
+            
+            Py4GW.Console.Log(
+                "Items", 
+                f"=== DEBUG: Items within range {max_range} ===", 
+                Py4GW.Console.MessageType.Info
+            )
+            
+            count = 0
+            for agent_id in items:
+                item_pos = GLOBAL_CACHE.Agent.GetXY(agent_id)
+                dist = Utils.Distance(my_pos, item_pos)
+                
+                if dist <= max_range:
+                    item_model = GLOBAL_CACHE.Agent.GetPlayerNumber(agent_id)
+                    Py4GW.Console.Log(
+                        "Items", 
+                        f"  Item: ModelID={item_model}, AgentID={agent_id}, Dist={dist:.0f}", 
+                        Py4GW.Console.MessageType.Info
+                    )
+                    count += 1
+            
+            Py4GW.Console.Log(
+                "Items", 
+                f"=== Total: {count} items ===", 
+                Py4GW.Console.MessageType.Info
+            )
+            
+        except Exception as e:
+            Py4GW.Console.Log(
+                "Items", 
+                f"Debug error: {e}", 
+                Py4GW.Console.MessageType.Error
+            )
