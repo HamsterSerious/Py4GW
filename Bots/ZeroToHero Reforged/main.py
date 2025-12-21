@@ -11,7 +11,7 @@ def main():
     """Main execution loop."""
     try:
         bot = get_bot()
-        bot.update()
+        bot.Update()
         ActionQueueManager().ProcessQueue("ACTION")
     except Exception as e:
         Py4GW.Console.Log("ZeroToHero", f"Crash: {str(e)}", Py4GW.Console.MessageType.Error)
