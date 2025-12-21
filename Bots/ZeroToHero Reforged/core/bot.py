@@ -6,7 +6,7 @@ from Py4GWCoreLib.Botting import BottingClass
 
 from core.constants import BOT_NAME, CAMPAIGN_ORDER, TASK_FILTER_OPTIONS
 from core.task_registry import TaskRegistry
-from core.team.manager import TeamManager  
+from core.team.manager import TeamManager
 
 # UI Components
 from ui.dashboard import DashboardUI
@@ -42,19 +42,22 @@ class ZeroToHeroBot(BottingClass):
         # 3. Execution State
         self.is_bot_active = False  # True when the "Start" button is pressed
         
-        # 4. UI Components
+        # 4. Helpers & State
+        self.notifications = NotificationManager(self)  # <--- Added this back
+        self.selection = _SelectionState(self)          # Helper class for UI dropdowns
+
+        # 5. UI Components
         self.dashboard = DashboardUI(self)
         self.notification_window = NotificationWindow(self)
         self.queue_window = QueueWindow(self)
         self.task_info_window = TaskInfoWindow(self)
         self.progress_window = ProgressWindow(self)
-        self.selection = _SelectionState(self) # Helper class for UI dropdowns
         
         # UI Visibility
         self.show_queue_window = False
         self.show_task_info_window = False
         
-        # 5. Idle State
+        # 6. Idle State
         # Keeps the FSM valid when no specific task is running
         self.config.FSM.AddState(
             name="Bot_Idle_Loop",
@@ -260,8 +263,31 @@ class ZeroToHeroBot(BottingClass):
         self.progress_window.draw()
 
 # =========================================================
-# Helper Classes (Selection State) - Kept internal to clean up
+# Helper Classes (Selection & Notifications)
 # =========================================================
+
+class NotificationManager:
+    """Manages UI notifications and requirement checks."""
+    def __init__(self, bot):
+        self.bot = bot
+        self.pending = []
+
+    def check_and_queue(self, campaign, task_name, hard_mode):
+        """Checks if a task can be run and adds notifications if not."""
+        # Simple placeholder logic for now. 
+        # You can expand this to check self.bot.Player.GetLevel() etc.
+        info = self.bot.task_registry.get_task_info(campaign, task_name)
+        if not info:
+            return
+            
+        # Example: Add logic here to check info.requirements
+        pass
+        
+    def add_notification(self, message):
+        self.pending.append(message)
+        
+    def clear(self):
+        self.pending = []
 
 class _SelectionState:
     """Handles the UI dropdown state logic."""
@@ -322,6 +348,7 @@ class _SelectionState:
 # Global instance
 _bot_instance = None
 def get_bot():
+    """Get or create the global bot instance."""
     global _bot_instance
     if _bot_instance is None:
         _bot_instance = ZeroToHeroBot()

@@ -5,12 +5,11 @@ Contains:
 - ZeroToHeroBot: Main bot controller
 - BaseTask: Task base class
 - TaskRegistry: Task discovery and queue management
-- TaskExecutor: Task execution lifecycle
 - Constants: Configuration values
 """
 from .base_task import BaseTask
 from .task_registry import TaskRegistry
-from .task_executor import TaskExecutor, NotificationManager, SelectionState
+from .bot import ZeroToHeroBot, get_bot
 from .constants import (
     BOT_NAME,
     BOT_VERSION,
@@ -31,9 +30,9 @@ __all__ = [
     # Classes
     'BaseTask',
     'TaskRegistry',
-    'TaskExecutor',
-    'NotificationManager',
-    'SelectionState',
+    'ZeroToHeroBot',
+    'get_bot',
+    
     # Constants
     'BOT_NAME',
     'BOT_VERSION',

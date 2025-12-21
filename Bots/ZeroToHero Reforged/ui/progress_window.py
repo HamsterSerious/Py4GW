@@ -13,11 +13,12 @@ class ProgressWindow(BaseWindow):
     
     @property
     def is_visible(self) -> bool:
-        # Only show if a task is actively running
-        return self.bot.executor.is_active and self.bot.is_running
+        # Only show if the bot is "Active" (Start pressed) AND FSM is running
+        return self.bot.is_bot_active and self.bot.is_running
 
     def draw_content(self):
-        task = self.bot.executor.current_task
+        # FIX: Access current_task_instance directly from the bot
+        task = self.bot.current_task_instance
         if not task:
             return
 
