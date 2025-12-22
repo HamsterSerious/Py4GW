@@ -1,5 +1,5 @@
 """
-Team management system for Zero To Hero bot.
+Team management for Zero To Hero bot.
 
 Contains:
 - TeamManager: Coordinator for team operations

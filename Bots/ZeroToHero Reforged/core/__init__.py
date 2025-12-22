@@ -3,13 +3,14 @@ Core package for Zero To Hero bot.
 
 Contains:
 - ZeroToHeroBot: Main bot controller
-- BaseTask: Task base class
+- BaseTask: Task base class (declarative pattern)
 - TaskRegistry: Task discovery and queue management
+- TaskExecutor: Task tracking (FSM handles execution)
 - Constants: Configuration values
 """
 from .base_task import BaseTask
 from .task_registry import TaskRegistry
-from .bot import ZeroToHeroBot, get_bot
+from .task_executor import TaskExecutor, NotificationManager, SelectionState
 from .constants import (
     BOT_NAME,
     BOT_VERSION,
@@ -30,9 +31,9 @@ __all__ = [
     # Classes
     'BaseTask',
     'TaskRegistry',
-    'ZeroToHeroBot',
-    'get_bot',
-    
+    'TaskExecutor',
+    'NotificationManager',
+    'SelectionState',
     # Constants
     'BOT_NAME',
     'BOT_VERSION',

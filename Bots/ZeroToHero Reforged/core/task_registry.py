@@ -146,9 +146,8 @@ class TaskRegistry:
         if not hasattr(cls, "get_info"):
             return False
         
-        # Must have create_routine method (Builder Pattern)
-        # This replaces the old check for 'execute'
-        if not hasattr(cls, "create_routine"):
+        # Must have build_routine method (CHANGED from execute)
+        if not hasattr(cls, "build_routine"):
             return False
         
         return True
@@ -193,6 +192,13 @@ class TaskRegistry:
     def get_task_info(self, campaign_name: str, task_name: str) -> TaskInfo:
         """
         Get cached TaskInfo for a task.
+        
+        Args:
+            campaign_name: Campaign the task belongs to
+            task_name: Display name of the task
+            
+        Returns:
+            TaskInfo or None if not found
         """
         if campaign_name in self.task_info_cache:
             return self.task_info_cache[campaign_name].get(task_name)
@@ -201,6 +207,9 @@ class TaskRegistry:
     def get_task_class(self, campaign_name: str, task_name: str):
         """
         Get the task class for a task.
+        
+        Returns:
+            Task class or None if not found
         """
         if campaign_name in self.available_tasks:
             return self.available_tasks[campaign_name].get(task_name)
@@ -213,6 +222,11 @@ class TaskRegistry:
     def add_task_to_queue(self, campaign_name: str, task_name: str, hard_mode: bool = False):
         """
         Adds a task to the queue.
+        
+        Args:
+            campaign_name: The campaign the task belongs to
+            task_name: The display name of the task
+            hard_mode: Whether to run as Hard Mode (only applies to Missions)
         """
         task_class = self.get_task_class(campaign_name, task_name)
         
@@ -258,6 +272,7 @@ class TaskRegistry:
     def get_next_task(self):
         """
         Gets the next task from the queue and creates a fresh instance.
+        Returns the task instance with use_hard_mode already set.
         """
         if self.task_queue:
             queued = self.task_queue.pop(0)
@@ -303,7 +318,6 @@ class TaskRegistry:
             self.task_queue[index], self.task_queue[index - 1] = \
                 self.task_queue[index - 1], self.task_queue[index]
             
-            # Get the task that moved up (it's now at index-1)
             moved_task = self.task_queue[index - 1]
             mode_str = f" [{moved_task.mode_string}]" if moved_task.task_type == TaskType.MISSION else ""
             
@@ -319,7 +333,6 @@ class TaskRegistry:
             self.task_queue[index], self.task_queue[index + 1] = \
                 self.task_queue[index + 1], self.task_queue[index]
             
-            # Get the task that moved down (it's now at index+1)
             moved_task = self.task_queue[index + 1]
             mode_str = f" [{moved_task.mode_string}]" if moved_task.task_type == TaskType.MISSION else ""
             
